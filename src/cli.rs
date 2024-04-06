@@ -21,12 +21,47 @@ pub struct Cli {
     pub verbose: bool,
 
     /// optional matrices YAML file
-    #[arg(short, long, name = "YAML")]
+    #[arg(short, long)]
     pub matrices: Option<PathBuf>,
 
     /// curve step
-    #[arg(long, default_value = "15", value_parser = clap::value_parser!(u16).range(1..), name = "INT")]
+    #[arg(long, default_value = "15", value_parser = clap::value_parser!(u16).range(1..))]
     pub curve_step: u16,
+
+    /// curve scale
+    #[arg(long, default_value = "0.33335", value_parser = parse_float_in_range)]
+    pub curve_scale: f32,
+
+    /// curve step one
+    #[arg(long, default_value = "6", value_parser = clap::value_parser!(u16).range(1..))]
+    pub curve_step_one: u16,
+
+    /// curve step two
+    #[arg(long, default_value = "4", value_parser = clap::value_parser!(u16).range(1..))]
+    pub curve_step_two: u16,
+
+    /// symcurve window
+    #[arg(long, default_value = "101", value_parser = clap::value_parser!(u16).range(1..))]
+    pub symcurve_win: u16,
+
+    /// symcurve step
+    #[arg(long, default_value = "1", value_parser = clap::value_parser!(u16).range(1..))]
+    pub symcurve_step: u16,
+
+    /// minimum linker size
+    #[arg(long, default_value = "30", value_parser = clap::value_parser!(u16).range(1..))]
+    pub min_linker_size: u16,
+}
+
+fn parse_float_in_range(s: &str) -> Result<f32, String> {
+    let value = s
+        .parse::<f32>()
+        .map_err(|_| "Value must be a floating-point number")?;
+    if value >= 0.0 && value <= 1.0 {
+        Ok(value)
+    } else {
+        Err("The value must be between 0 and 1".to_owned())
+    }
 }
 
 #[cfg(test)]
@@ -85,5 +120,26 @@ mod tests {
             .unwrap_err()
             .to_string()
             .starts_with("error: invalid value '0' for '--curve-step <INT>'"));
+    }
+
+    // helper to test_curve_scale()
+    fn get_different_curve_scale_parsings(curve_scale_s: &str) -> Result<Cli, clap::error::Error> {
+        return Cli::try_parse_from(&[
+            "symcurve",
+            "input.fasta",
+            "output.bw",
+            "--curve-scale",
+            curve_scale_s,
+        ]);
+    }
+
+    #[test]
+    fn test_curve_scale() {
+        // test different passed in curve scales
+        assert_eq!(get_different_curve_scale_parsings("0").is_ok(), true);
+        assert_eq!(get_different_curve_scale_parsings("0.33").is_ok(), true);
+        assert_eq!(get_different_curve_scale_parsings("1").is_ok(), true);
+        assert_eq!(get_different_curve_scale_parsings("1.1").is_err(), true);
+        assert_eq!(get_different_curve_scale_parsings("-1").is_err(), true);
     }
 }
