@@ -8,7 +8,7 @@ use clap::Parser;
 use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
-#[command(version = "0.0.1", about, long_about = None)]
+#[command(version = env!("CARGO_PKG_VERSION"), about = "Symmetry of DNA curvature.", long_about = None)]
 pub struct Cli {
     /// FASTA input file path
     pub input: PathBuf,
