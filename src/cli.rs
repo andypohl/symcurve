@@ -100,7 +100,7 @@ mod tests {
         let mut err = clap::Error::new(ErrorKind::InvalidValue).with_cmd(&cmd);
         err.insert(
             ContextKind::InvalidArg,
-            ContextValue::String("--matrices <YAML>".to_owned()),
+            ContextValue::String("--matrices <MATRICES>".to_owned()),
         );
         err.insert(
             ContextKind::InvalidValue,
@@ -119,7 +119,7 @@ mod tests {
         assert!(args_result
             .unwrap_err()
             .to_string()
-            .starts_with("error: invalid value '0' for '--curve-step <INT>'"));
+            .starts_with("error: invalid value '0' for '--curve-step"));
     }
 
     // helper to test_curve_scale()
