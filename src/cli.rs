@@ -3,6 +3,29 @@
 //! The main arguments to the symcurve CLI are the input and output file paths.
 //! These should be provided as positional arguments. The other arguments are optional
 //! but have constraints and default values.
+//! 
+//! ```text
+//! Symmetry of DNA curvature.
+//! 
+//! Usage: symcurve [OPTIONS] <INPUT> <OUTPUT>
+//! 
+//! Arguments:
+//!   <INPUT>   FASTA input file path
+//!   <OUTPUT>  bigWig output file path
+//! 
+//! Options:
+//!   -v, --verbose                            verbose setting
+//!   -m, --matrices <MATRICES>                optional matrices YAML file
+//!       --curve-step <CURVE_STEP>            curve step [default: 15]
+//!       --curve-scale <CURVE_SCALE>          curve scale [default: 0.33335]
+//!       --curve-step-one <CURVE_STEP_ONE>    curve step one [default: 6]
+//!       --curve-step-two <CURVE_STEP_TWO>    curve step two [default: 4]
+//!       --symcurve-win <SYMCURVE_WIN>        symcurve window [default: 101]
+//!       --symcurve-step <SYMCURVE_STEP>      symcurve step [default: 1]
+//!       --min-linker-size <MIN_LINKER_SIZE>  minimum linker size [default: 30]
+//!   -h, --help                               Print help
+//!   -V, --version                            Print version
+//! ```
 
 use clap::Parser;
 use std::path::PathBuf;
