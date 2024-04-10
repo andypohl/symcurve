@@ -1,1 +1,1 @@
-mod fasta;
+pub mod fasta;
