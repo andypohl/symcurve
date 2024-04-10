@@ -6,9 +6,26 @@ use noodles_fasta::{self, Record};
 
 #[allow(dead_code)]
 /// Given a record, split the sequence by runs of Ns.
+/// 
 /// Returns a vector of records, each with a sequence that does not contain any Ns.
 /// The description of each record is set to the start-end position of the sequence,
 /// the positions being 1-based.
+/// 
+/// Input:
+/// ```text
+/// >chr42
+/// ATGCATGC
+/// NNNNATGC
+/// A
+/// ```
+/// 
+/// Output:
+/// ```text
+/// >chr42 1-8
+/// ATGCATGC
+/// >chr42 13-17
+/// ATGCA
+/// ```
 pub fn split_seq_by_n(record: Record) -> Vec<Record> {
     let mut records = Vec::new();
     let n = record.sequence().len();
