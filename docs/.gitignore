@@ -1,6 +1,7 @@
 node_modules
 public
 resources
+static/rust
 themes/*/exampleSite
 *.bak
 *.swp
