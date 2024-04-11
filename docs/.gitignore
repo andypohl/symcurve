@@ -1,0 +1,9 @@
+node_modules
+public
+resources
+themes/*/exampleSite
+*.bak
+*.swp
+*.tmp
+*.log
+.DS_Store
