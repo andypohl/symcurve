@@ -3,16 +3,16 @@
 //! The main arguments to the symcurve CLI are the input and output file paths.
 //! These should be provided as positional arguments. The other arguments are optional
 //! but have constraints and default values.
-//! 
+//!
 //! ```text
 //! Symmetry of DNA curvature.
-//! 
+//!
 //! Usage: symcurve [OPTIONS] <INPUT> <OUTPUT>
-//! 
+//!
 //! Arguments:
 //!   <INPUT>   FASTA input file path
 //!   <OUTPUT>  bigWig output file path
-//! 
+//!
 //! Options:
 //!   -v, --verbose                            verbose setting
 //!   -m, --matrices <MATRICES>                optional matrices YAML file
@@ -164,5 +164,6 @@ mod tests {
         assert_eq!(get_different_curve_scale_parsings("1").is_ok(), true);
         assert_eq!(get_different_curve_scale_parsings("1.1").is_err(), true);
         assert_eq!(get_different_curve_scale_parsings("-1").is_err(), true);
+        assert_eq!(get_different_curve_scale_parsings("abc").is_err(), true);
     }
 }
