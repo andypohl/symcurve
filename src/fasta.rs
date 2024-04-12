@@ -17,11 +17,7 @@ pub struct RecordPiece {
 
 impl RecordPiece {
     fn new(record: Rc<Record>, start: Position, end: Position) -> Self {
-        Self {
-            record,
-            start,
-            end,
-        }
+        Self { record, start, end }
     }
 
     /// Get the sequence of the RecordPiece by slicing into the original Record.
@@ -32,11 +28,11 @@ impl RecordPiece {
 
 #[allow(dead_code)]
 /// Given a record, split the sequence by runs of Ns.
-/// 
+///
 /// Returns a vector of records, each with a sequence that does not contain any Ns.
 /// The description of each record is set to the start-end position of the sequence,
 /// the positions being 1-based.
-/// 
+///
 /// Input:
 /// ```text
 /// >chr42
@@ -44,7 +40,7 @@ impl RecordPiece {
 /// NNNNATGC
 /// A
 /// ```
-/// 
+///
 /// Output:
 /// ```text
 /// >chr42 1-8
@@ -103,8 +99,8 @@ mod tests {
 
     #[test]
     fn test_windows() {
-        let seq: &str = "ACGTACGTACGTACGTACGT";
-        let mut seq_bytes = seq.as_bytes().windows(3);
+        let seq = b"ACGTACGTACGTACGTACGT";
+        let mut seq_bytes = seq.windows(3);
         assert_eq!(seq_bytes.next().unwrap(), b"ACG");
         assert_eq!(seq_bytes.next().unwrap(), b"CGT");
         assert_eq!(seq_bytes.next().unwrap(), b"GTA");
@@ -120,6 +116,7 @@ mod tests {
             .collect();
         assert_eq!(split_records.len(), 2);
         assert_eq!(split_records[0].sequence().as_ref(), b"ATGCATGC".to_vec());
+        assert_eq!(split_records[1].sequence().as_ref(), b"ATGCA".to_vec());
         assert_eq!(split_records[1].sequence().as_ref(), b"ATGCA".to_vec());
         assert_eq!(usize::from(split_records[1].start), 13);
         assert_eq!(usize::from(split_records[1].end), 17);
