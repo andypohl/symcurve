@@ -1,9 +1,15 @@
 //! This module contains functions for calculation of DNA curvature.
-pub type NucMatrix = [[[f64; 4]; 4]; 4];
+use std::collections::VecDeque;
+use std::f64::consts::PI;
 use std::fmt;
+use std::iter::Iterator;
 
+const NUC_MATRIX_DIMENSIONS: usize = 3;
+pub type NucMatrix = [[[f64; 4]; 4]; 4];
 #[allow(dead_code)]
 const TWIST: NucMatrix = [[[0.598647428; 4]; 4]; 4];
+#[allow(dead_code)]
+const TILT: NucMatrix = [[[0.0; 4]; 4]; 4];
 #[allow(dead_code)]
 const ROLL_NUC: NucMatrix = [
     [
@@ -92,6 +98,154 @@ fn matrix_lookup(triplet: &[u8], matrix: &NucMatrix) -> Result<f64, MatrixLookup
     Ok(matrix[ixs[0]][ixs[1]][ixs[2]])
 }
 
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+enum RollType {
+    Simple,
+    Activated,
+}
+
+#[allow(dead_code)]
+#[derive(Clone)]
+struct TripletData {
+    twist: f64,
+    roll: f64,
+    tilt: f64,
+    dx: f64,
+    dy: f64,
+    roll_type: RollType,
+}
+
+struct TripletWindowsIter<I: Iterator> {
+    base_buffer: VecDeque<u8>,
+    inner: I,
+    twist_sum: f64,
+    roll_type: RollType,
+}
+
+#[allow(dead_code)]
+struct CoordsData {
+    triplet_data: Option<TripletData>,
+    x: f64,
+    y: f64,
+}
+
+struct CoordsIter<I: Iterator> {
+    inner: I,
+    tail: bool,
+    prev_x_coord: f64,
+    prev_y_coord: f64,
+    prev_dx: f64,
+    prev_dy: f64,
+}
+
+impl<I> Iterator for TripletWindowsIter<I>
+where
+    I: Iterator<Item = u8>,
+{
+    type Item = TripletData;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while self.base_buffer.len() < NUC_MATRIX_DIMENSIONS {
+            if let Some(item) = self.inner.next() {
+                self.base_buffer.push_back(item);
+            } else if self.base_buffer.is_empty() {
+                return None;
+            } else {
+                break;
+            }
+        }
+
+        if self.base_buffer.len() >= NUC_MATRIX_DIMENSIONS {
+            let triplet: Vec<u8> = self.base_buffer.iter().cloned().take(3).collect();
+            let twist = matrix_lookup(&triplet, &TWIST).unwrap();
+            let roll = match self.roll_type {
+                RollType::Simple => matrix_lookup(&triplet, &ROLL_DNASE).unwrap(),
+                RollType::Activated => matrix_lookup(&triplet, &ROLL_NUC).unwrap(),
+            };
+            let tilt = matrix_lookup(&triplet, &TILT).unwrap();
+            self.twist_sum += twist;
+
+            let window = TripletData {
+                twist,
+                roll,
+                tilt,
+                dx: (roll * self.twist_sum.sin()) + (tilt * (self.twist_sum + PI / 2.0).sin()),
+                dy: (roll * self.twist_sum.cos()) + (tilt * (self.twist_sum + PI / 2.0).cos()),
+                roll_type: self.roll_type.clone(),
+            };
+            self.base_buffer.pop_front();
+            Some(window)
+        } else {
+            None
+        }
+    }
+}
+
+impl<I> Iterator for CoordsIter<I>
+where
+    I: Iterator<Item = TripletData>,
+{
+    type Item = CoordsData;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(triplet_data) = self.inner.next() {
+            self.prev_dx = triplet_data.dx;
+            self.prev_dy = triplet_data.dy;
+            Some(self.create_coords_data(Some(triplet_data.to_owned())))
+        } else if !self.tail {
+            self.tail = true;
+            Some(self.create_coords_data(None))
+        } else {
+            None
+        }
+    }
+}
+
+impl<I> CoordsIter<I>
+where
+    I: Iterator<Item = TripletData>,
+{
+    fn create_coords_data(&mut self, triplet_data: Option<TripletData>) -> CoordsData {
+        let x_coord = self.prev_x_coord + self.prev_dx;
+        let y_coord = self.prev_y_coord + self.prev_dy;
+        self.prev_x_coord = x_coord;
+        self.prev_y_coord = y_coord;
+        CoordsData {
+            triplet_data,
+            x: x_coord,
+            y: y_coord,
+        }
+    }
+}
+
+trait TripletWindowsIterator: Iterator<Item = u8> + Sized {
+    fn triplet_windows(self, roll_type: RollType) -> TripletWindowsIter<Self> {
+        TripletWindowsIter {
+            base_buffer: VecDeque::new(),
+            inner: self,
+            twist_sum: 0.0,
+            roll_type,
+        }
+    }
+}
+
+trait CoordsIterator: Iterator<Item = TripletData> + Sized {
+    fn coords_iter(self) -> CoordsIter<Self> {
+        CoordsIter {
+            inner: self,
+            tail: false,
+            prev_x_coord: 0.0,
+            prev_y_coord: 0.0,
+            prev_dx: 0.0,
+            prev_dy: 0.0,
+        }
+    }
+}
+
+impl<I: Iterator<Item = u8>> TripletWindowsIterator for I {}
+impl<I: Iterator<Item = TripletData>> CoordsIterator for I {}
+
 #[cfg(test)]
 mod tests {
     extern crate approx;
@@ -123,5 +277,34 @@ mod tests {
             })
             .collect();
         assert_eq!(cumsum, vec![1.0, 3.0, 6.0, 10.0]);
+    }
+
+    #[test]
+    fn test_triplet_iter() {
+        let dna = b"ACGTACGT";
+        let windows: Vec<TripletData> = dna
+            .iter()
+            .cloned()
+            .triplet_windows(RollType::Simple)
+            .collect();
+        assert_eq!(windows.len(), 6);
+        let windows: Vec<TripletData> = dna
+            .iter()
+            .cloned()
+            .triplet_windows(RollType::Activated)
+            .collect();
+        assert_eq!(windows.len(), 6);
+    }
+
+    #[test]
+    fn test_coords_iter() {
+        let dna = b"ACGTACGT";
+        let windows: Vec<CoordsData> = dna
+            .iter()
+            .cloned()
+            .triplet_windows(RollType::Simple)
+            .coords_iter()
+            .collect();
+        assert_eq!(windows.len(), 7);
     }
 }
