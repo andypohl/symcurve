@@ -135,8 +135,6 @@ where
         while self.base_buffer.len() < matrix::TRIPLET_SIZE {
             if let Some(item) = self.inner.next() {
                 self.base_buffer.push_back(item);
-            } else if self.base_buffer.is_empty() {
-                return None;
             } else {
                 break;
             }
@@ -315,6 +313,17 @@ mod tests {
             .triplet_windows_iter(matrix::RollType::Active)
             .collect();
         assert_eq!(windows.len(), 6);
+    }
+
+    #[test]
+    fn test_triplet_iter_too_short() {
+        let dna = b"AC";
+        let windows: Vec<TripletData> = dna
+            .iter()
+            .cloned()
+            .triplet_windows_iter(matrix::RollType::Simple)
+            .collect();
+        assert_eq!(windows.len(), 0);
     }
 
     #[test]

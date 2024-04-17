@@ -154,4 +154,12 @@ mod tests {
         assert!(matrix_lookup(b"AAAA", &ROLL_ACTIVE).is_err());
         assert!(matrix_lookup(b"AAN", &ROLL_ACTIVE).is_err());
     }
+
+    #[test]
+    fn test_matrix_lookup_error_display() {
+        let error = MatrixLookupError {
+            details: "Test error details".to_string(),
+        };
+        assert_eq!(format!("{}", error), "Error: Test error details");
+    }
 }
