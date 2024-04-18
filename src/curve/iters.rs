@@ -25,7 +25,7 @@ use std::iter::Iterator;
 /// * `dx`: The delta x value, calculated based on the roll and tilt.
 /// * `dy`: The delta y value, calculated based on the roll and tilt.
 /// * `roll_type`: The type of roll (either simple or activated).
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct TripletData {
     twist: f64,
     roll: f64,
@@ -145,10 +145,10 @@ where
             let twist = matrix::matrix_lookup(&triplet, &matrix::TWIST).unwrap();
             let roll = match self.roll_type {
                 matrix::RollType::Simple => {
-                    matrix::matrix_lookup(&triplet, &matrix::ROLL_ACTIVE).unwrap()
+                    matrix::matrix_lookup(&triplet, &matrix::ROLL_SIMPLE).unwrap()
                 }
                 matrix::RollType::Active => {
-                    matrix::matrix_lookup(&triplet, &matrix::ROLL_SIMPLE).unwrap()
+                    matrix::matrix_lookup(&triplet, &matrix::ROLL_ACTIVE).unwrap()
                 }
             };
             let tilt = matrix::matrix_lookup(&triplet, &matrix::TILT).unwrap();
@@ -192,9 +192,10 @@ where
     /// A `Some(CoordsData)` with the next coordinates and `TripletData`, or `None` if there are no more items.
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(triplet_data) = self.inner.next() {
+            let result = Some(self.create_coords_data(Some(triplet_data.to_owned())));
             self.prev_dx = triplet_data.dx;
             self.prev_dy = triplet_data.dy;
-            Some(self.create_coords_data(Some(triplet_data.to_owned())))
+            result
         } else if !self.tail {
             self.tail = true;
             Some(self.create_coords_data(None))
@@ -294,25 +295,54 @@ trait CoordsIterator: Iterator<Item = TripletData> + Sized {
 impl<I: Iterator<Item = u8>> TripletWindowsIterator for I {}
 impl<I: Iterator<Item = TripletData>> CoordsIterator for I {}
 
+#[cfg(test)]
 mod tests {
-    #[allow(unused_imports)]
     use super::*;
+    use approx::assert_abs_diff_eq;
 
+    /// Test the Triplet iterator:
+    ///
+    /// Below is a table of some of the expected values for the triplet iterator over the DNA
+    /// sequence "ACGTAGGT".
+    ///
+    /// | Nuc | Trip | pos |   ixs |  twist | roll a | roll s | twist_sm |  dx_act | dx_simp |
+    /// | --: | ---: | --: | ----: | -----: | -----: | -----: | -------: | ------: | ------: |
+    /// |   A |  ACG |   0 | 0,1,2 | 0.5986 |    8.7 | 7.7171 |   0.5986 |  4.9027 |  4.3488 |
+    /// |   C |  CGT |   1 | 1,2,3 | 0.5986 |    7.5 | 6.7552 |   1.1972 |  6.9829 |  6.2895 |
+    /// |   G |  GTA |   2 | 2,3,0 | 0.5986 |    7.5 | 6.7552 |   1.7958 |  7.3107 |  6.5847 |
+    /// |   T |  TAG |   3 | 3,0,2 | 0.5986 |    9.6 | 6.8996 |   2.3944 |  6.5227 |  4.6879 |
+    /// |   A |  AGG |   4 | 0,2,2 | 0.5986 |    4.7 | 5.0523 |   2.9930 |  0.6947 |  0.7468 |
+    /// |   G |  GGT |   5 | 2,2,3 | 0.5986 |    8.2 | 9.0823 |   3.5916 | -3.5689 | -3.9529 |
+    /// |   G |  N/A |   6 |   N/A | 0.5986 |    N/A |    N/A |      N/A |     N/A |     N/A |
+    /// |   T |  N/A |   7 |   N/A | 0.5986 |    N/A |    N/A |      N/A |     N/A |     N/A |
     #[test]
     fn test_triplet_iter() {
-        let dna = b"ACGTACGT";
+        let dna = b"ACGTAGGT";
         let windows: Vec<TripletData> = dna
             .iter()
             .cloned()
             .triplet_windows_iter(matrix::RollType::Simple)
             .collect();
         assert_eq!(windows.len(), 6);
+        let expected_rolls = vec![7.7171, 6.75525, 6.75525, 6.8996, 5.0523, 9.0823];
+        let expected_dx = vec![4.3488, 6.2895, 6.58475, 4.68788, 0.74679, -3.9529];
+        for (i, window) in windows.iter().enumerate() {
+            assert_abs_diff_eq!(window.roll, expected_rolls[i], epsilon = 1e-6);
+            assert_abs_diff_eq!(window.dx, expected_dx[i], epsilon = 1e-4);
+        }
+        assert_abs_diff_eq!(windows[0].twist, 0.5986474, epsilon = 1e-6);
         let windows: Vec<TripletData> = dna
             .iter()
             .cloned()
             .triplet_windows_iter(matrix::RollType::Active)
             .collect();
+        let expected_rolls = vec![8.7, 7.5, 7.5, 9.6, 4.7, 8.2];
+        let expected_dx = vec![4.9027, 6.9829, 7.3107, 6.5227, 0.69471, -3.56887];
         assert_eq!(windows.len(), 6);
+        for (i, window) in windows.iter().enumerate() {
+            assert_abs_diff_eq!(window.roll, expected_rolls[i], epsilon = 1e-6);
+            assert_abs_diff_eq!(window.dx, expected_dx[i], epsilon = 1e-4);
+        }
     }
 
     #[test]
@@ -326,15 +356,32 @@ mod tests {
         assert_eq!(windows.len(), 0);
     }
 
+    /// Below is a table of some of the expected values for the coords iterator over the DNA
+    /// sequence "ACGTAGGT".
+    ///
+    /// | Nuc | Trip | pos |  dx_act | dx_simp | x_coord_a |
+    /// | --: | ---: | --: | ------: | ------: | --------: |
+    /// |   A |  ACG |   0 |  4.9027 |  4.3488 |       0.0 |
+    /// |   C |  CGT |   1 |  6.9829 |  6.2895 |    4.9027 |
+    /// |   G |  GTA |   2 |  7.3107 |  6.5847 |   11.8856 |
+    /// |   T |  TAG |   3 |  6.5227 |  4.6879 |   19.1964 |
+    /// |   A |  AGG |   4 |  0.6947 |  0.7468 |   25.7190 |
+    /// |   G |  GGT |   5 | -3.5689 | -3.9529 |   26.4137 |
+    /// |   G |  N/A |   6 |     N/A |     N/A |   22.8449 |
+    /// |   T |  N/A |   7 |     N/A |     N/A |       N/A |
     #[test]
     fn test_coords_iter() {
-        let dna = b"ACGTACGT";
+        let dna = b"ACGTAGGT";
         let windows: Vec<CoordsData> = dna
             .iter()
             .cloned()
-            .triplet_windows_iter(matrix::RollType::Simple)
+            .triplet_windows_iter(matrix::RollType::Active)
             .coords_iter()
             .collect();
         assert_eq!(windows.len(), 7);
+        let expected_x_coord_a = vec![0.0, 4.9027, 11.8856, 19.1964, 25.7190, 26.4137, 22.8448];
+        for (i, window) in windows.iter().enumerate() {
+            assert_abs_diff_eq!(window.x, expected_x_coord_a[i], epsilon = 1e-4);
+        }
     }
 }
