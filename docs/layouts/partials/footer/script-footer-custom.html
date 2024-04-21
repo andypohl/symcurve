@@ -1,9 +1,19 @@
 {{/* Put your custom <script></script> tags here */}}
 
 <script>
+
+// Checks @media (prefers-color-scheme) for dark mode
+function getPreferredScheme() {
+  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        // Dark mode is preferred
+        return 'dark';
+  }
+  return 'light';
+}
+
 function toggleThemeForImage() {
   $('img.themed').each(function() {
-    const savedTheme = localStorage.getItem('theme') || 'light';
+    const savedTheme = localStorage.getItem('theme') || getPreferredScheme();
     var src = $(this).attr('src');
     if (src.match(/-light\.png$/) && savedTheme == 'dark') {
       $(this).attr('src', src.replace('-light.png', '-dark.png'));
