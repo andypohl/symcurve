@@ -84,3 +84,14 @@ copyRight = "Copyright (c) 2020-2024 Hyas"
   hint = "photo"
   quality = 85
   resampleFilter = "Lanczos"
+
+[markup]
+  [markup.goldmark]
+    [markup.goldmark.extensions]
+      [markup.goldmark.extensions.passthrough]
+        enable = true
+        [markup.goldmark.extensions.passthrough.delimiters]
+          block = [['\[', '\]'], ['$$', '$$']]
+          inline = [['\(', '\)']]
+[params]
+  math = true

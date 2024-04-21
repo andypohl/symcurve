@@ -1,5 +1,26 @@
 {{/* Put your custom <script></script> tags here */}}
 
+<script>
+function toggleThemeForImage() {
+  $('img.themed').each(function() {
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    var src = $(this).attr('src');
+    if (src.match(/-light\.png$/) && savedTheme == 'dark') {
+      $(this).attr('src', src.replace('-light.png', '-dark.png'));
+    } else if (src.match(/-dark\.png$/) && savedTheme == 'light') {
+      $(this).attr('src', src.replace('-dark.png', '-light.png'));
+    }
+  });
+}
+$(document).ready(function() {
+  toggleThemeForImage();
+  $('#buttonColorMode').click(function() {
+    toggleThemeForImage();
+  });
+});
+</script>
+
+
 {{/* EXAMPLE - only load script for production
 {{ if eq (hugo.Environment) "production" -}}
   {{ partial "footer/esbuild" (dict "src" "js/instantpage.js" "load" "async" "transpile" false) -}}

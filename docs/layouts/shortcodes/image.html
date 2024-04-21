@@ -1,0 +1,24 @@
+{{ $src := .Get "src" }}
+{{ $cls := .Get "class" | default "" }}
+{{ $alt := .Get "alt" | default "" }}
+{{ $title := .Get "title" | default "" }}
+{{ $image := resources.Get $src }}
+{{ $width := .Get "width" | default $image.Width }}
+{{ $height := .Get "height" | default $image.Height }}
+{{ if $image }}
+    <!-- {{ $processedImage := $image.Resize "600x" }} Example resize operation -->
+    <img src="{{ $processedImage.RelPermalink }}" class="{{ $cls }}" alt="{{ $alt }}" title="{{ $title }}" width="{{ $width }}" height="{{ $height }}">
+{{ else }}
+    <p>Image not found</p>
+{{ end }}
+{{ $alt := .Get "alt" | default "" }}
+{{ $title := .Get "title" | default "" }}
+{{ $image := resources.Get $src }}
+{{ $width := .Get "width" | default $image.Width }}
+{{ $height := .Get "height" | default $image.Height }}
+{{ if $image }}
+    <!-- {{ $processedImage := $image.Resize "600x" }} Example resize operation -->
+    <img src="{{ $processedImage.RelPermalink }}" alt="{{ $alt }}" title="{{ $title }}" width="{{ $width }}" height="{{ $height }}">
+{{ else }}
+    <p>Image not found</p>
+{{ end }}
