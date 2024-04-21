@@ -6,7 +6,7 @@
     </div>
     <div class="col-lg-9 col-xl-8 text-center">
       <p class="lead">{{ .Params.lead | safeHTML }}</p>
-      <a class="btn btn-primary btn-cta rounded-pill btn-lg my-3" href="{{ .Site.BaseURL }}docs/{{ if site.Params.doks.docsVersioning }}{{ site.Params.doks.docsVersion }}/{{ end }}guides/example-guide/" role="button">Guide</a>
+      <a class="btn btn-primary btn-cta rounded-pill btn-lg my-3" href="{{ .Site.BaseURL }}docs/{{ if site.Params.doks.docsVersioning }}{{ site.Params.doks.docsVersion }}/{{ end }}guides/about/" role="button">Guide</a>
       {{ .Content }}
     </div>
   </div>
@@ -33,10 +33,6 @@
         </div>
         <div class="col-lg-5">
           <h2 class="h4">R</h2>
-          <p></p>
-        </div>
-        <div class="col-lg-5">
-          <h2 class="h4">Background</h2>
           <p></p>
         </div>
       </div>
