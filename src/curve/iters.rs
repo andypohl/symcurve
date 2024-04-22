@@ -61,58 +61,6 @@ struct TripletWindowsIter<I: Iterator> {
     roll_type: matrix::RollType,
 }
 
-/// Represents the coordinates and associated data for a triplet of nucleotides.
-///
-/// # Layer 2
-///
-/// `CoordsData` contains the x and y coordinates calculated from the `TripletData`, as well as
-/// the `TripletData` itself. The `TripletData` is optional, but is only None at the very end
-/// of the associated iterator.
-///
-/// # Fields
-///
-/// * `triplet_data`: The `TripletData` associated with these coordinates. This is `None` if there
-///   is no associated data.
-/// * `x`: The x coordinate.
-/// * `y`: The y coordinate.
-struct CoordsData {
-    triplet_data: Option<TripletData>,
-    x: f64,
-    y: f64,
-}
-
-/// An iterator-wrapping struct that yields `CoordsData` from another iterator.
-///
-/// # Layer 2
-///
-/// `CoordsIter` wraps around another iterator that yields `TripletData`, and yields `CoordsData`
-/// calculated from the `TripletData` and the previous coordinates and deltas. It also keeps track
-/// of whether it has yielded the tail coordinates yet.
-///
-/// # Type Parameters
-///
-/// * `I`: The type of the inner iterator. Must be an iterator over `TripletData`.
-///
-/// # Fields
-///
-/// * `inner`: The inner iterator that yields `TripletData`.
-/// * `head`: A boolean that indicates whether the first `CoordsData` has been yielded yet.
-/// * `tail`: A boolean that indicates whether the end of the iterator has been reached,
-///   at which point one more `CoordsData` is yielded with no associated `TripletData`.
-/// * `prev_x_coord`: The x coordinate from the previous `CoordsData`.
-/// * `prev_y_coord`: The y coordinate from the previous `CoordsData`.
-/// * `prev_dx`: The delta x from the previous `TripletData`.
-/// * `prev_dy`: The delta y from the previous `TripletData`.
-struct CoordsIter<I: Iterator> {
-    inner: I,
-    head: bool,
-    tail: bool,
-    prev_x_coord: f64,
-    prev_y_coord: f64,
-    prev_dx: f64,
-    prev_dy: f64,
-}
-
 /// Implementation of the `Iterator` trait for `TripletWindowsIter` struct.
 ///
 /// This iterator yields `TripletData` items, which are calculated based on the next three bases
@@ -170,6 +118,87 @@ where
             None
         }
     }
+}
+
+/// A trait for `u8` Iterators to yield `TripletData`.
+///
+/// # Layer 1
+///
+/// `TripletWindowsIterator` is a trait for iterators over `u8` that provides a method for
+/// transforming the iterator into a `TripletWindowsIter`. This allows for convenient conversion
+/// of any iterator over `u8` into an iterator that yields triplets of nucleotides.
+///
+/// # Type Parameters
+///
+/// * `Self`: The type implementing this trait. Must be an iterator over `u8`.
+///
+/// # Methods
+///
+/// * `triplet_windows_iter`: Takes a `RollType` and returns a `TripletWindowsIter` that yields
+///   triplets of nucleotides from the original iterator.
+trait TripletWindowsIterator: Iterator<Item = u8> + Sized {
+    fn triplet_windows_iter(self, roll_type: matrix::RollType) -> TripletWindowsIter<Self> {
+        TripletWindowsIter {
+            base_buffer: VecDeque::new(),
+            inner: self,
+            twist_sum: 0.0,
+            roll_type,
+        }
+    }
+}
+
+impl<I: Iterator<Item = u8>> TripletWindowsIterator for I {}
+
+/// Represents the coordinates and associated data for a triplet of nucleotides.
+///
+/// # Layer 2
+///
+/// `CoordsData` contains the x and y coordinates calculated from the `TripletData`, as well as
+/// the `TripletData` itself. The `TripletData` is optional, but is only None at the very end
+/// of the associated iterator.
+///
+/// # Fields
+///
+/// * `triplet_data`: The `TripletData` associated with these coordinates. This is `None` if there
+///   is no associated data.
+/// * `x`: The x coordinate.
+/// * `y`: The y coordinate.
+struct CoordsData {
+    triplet_data: Option<TripletData>,
+    x: f64,
+    y: f64,
+}
+
+/// An iterator-wrapping struct that yields `CoordsData` from another iterator.
+///
+/// # Layer 2
+///
+/// `CoordsIter` wraps around another iterator that yields `TripletData`, and yields `CoordsData`
+/// calculated from the `TripletData` and the previous coordinates and deltas. It also keeps track
+/// of whether it has yielded the tail coordinates yet.
+///
+/// # Type Parameters
+///
+/// * `I`: The type of the inner iterator. Must be an iterator over `TripletData`.
+///
+/// # Fields
+///
+/// * `inner`: The inner iterator that yields `TripletData`.
+/// * `head`: A boolean that indicates whether the first `CoordsData` has been yielded yet.
+/// * `tail`: A boolean that indicates whether the end of the iterator has been reached,
+///   at which point one more `CoordsData` is yielded with no associated `TripletData`.
+/// * `prev_x_coord`: The x coordinate from the previous `CoordsData`.
+/// * `prev_y_coord`: The y coordinate from the previous `CoordsData`.
+/// * `prev_dx`: The delta x from the previous `TripletData`.
+/// * `prev_dy`: The delta y from the previous `TripletData`.
+struct CoordsIter<I: Iterator> {
+    inner: I,
+    head: bool,
+    tail: bool,
+    prev_x_coord: f64,
+    prev_y_coord: f64,
+    prev_dx: f64,
+    prev_dy: f64,
 }
 
 impl<I> Iterator for CoordsIter<I>
@@ -242,33 +271,6 @@ where
     }
 }
 
-/// A trait for `u8` Iterators to yield `TripletData`.
-///
-/// # Layer 1
-///
-/// `TripletWindowsIterator` is a trait for iterators over `u8` that provides a method for
-/// transforming the iterator into a `TripletWindowsIter`. This allows for convenient conversion
-/// of any iterator over `u8` into an iterator that yields triplets of nucleotides.
-///
-/// # Type Parameters
-///
-/// * `Self`: The type implementing this trait. Must be an iterator over `u8`.
-///
-/// # Methods
-///
-/// * `triplet_windows_iter`: Takes a `RollType` and returns a `TripletWindowsIter` that yields
-///   triplets of nucleotides from the original iterator.
-trait TripletWindowsIterator: Iterator<Item = u8> + Sized {
-    fn triplet_windows_iter(self, roll_type: matrix::RollType) -> TripletWindowsIter<Self> {
-        TripletWindowsIter {
-            base_buffer: VecDeque::new(),
-            inner: self,
-            twist_sum: 0.0,
-            roll_type,
-        }
-    }
-}
-
 /// A trait for `TripletData` Iterators to yield `CoordsData`.
 ///
 /// # Layer 2
@@ -299,7 +301,6 @@ trait CoordsIterator: Iterator<Item = TripletData> + Sized {
     }
 }
 
-impl<I: Iterator<Item = u8>> TripletWindowsIterator for I {}
 impl<I: Iterator<Item = TripletData>> CoordsIterator for I {}
 
 #[cfg(test)]
