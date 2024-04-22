@@ -96,6 +96,7 @@ struct CoordsData {
 /// # Fields
 ///
 /// * `inner`: The inner iterator that yields `TripletData`.
+/// * `head`: A boolean that indicates whether the first `CoordsData` has been yielded yet.
 /// * `tail`: A boolean that indicates whether the end of the iterator has been reached,
 ///   at which point one more `CoordsData` is yielded with no associated `TripletData`.
 /// * `prev_x_coord`: The x coordinate from the previous `CoordsData`.
@@ -104,6 +105,7 @@ struct CoordsData {
 /// * `prev_dy`: The delta y from the previous `TripletData`.
 struct CoordsIter<I: Iterator> {
     inner: I,
+    head: bool,
     tail: bool,
     prev_x_coord: f64,
     prev_y_coord: f64,
@@ -195,6 +197,10 @@ where
             let result = Some(self.create_coords_data(Some(triplet_data.to_owned())));
             self.prev_dx = triplet_data.dx;
             self.prev_dy = triplet_data.dy;
+            if !self.head {
+                self.head = true;
+                return self.next();
+            }
             result
         } else if !self.tail {
             self.tail = true;
@@ -283,6 +289,7 @@ trait CoordsIterator: Iterator<Item = TripletData> + Sized {
     fn coords_iter(self) -> CoordsIter<Self> {
         CoordsIter {
             inner: self,
+            head: false,
             tail: false,
             prev_x_coord: 0.0,
             prev_y_coord: 0.0,
@@ -361,7 +368,7 @@ mod tests {
     ///
     /// | Nuc | Trip | pos |  dx_act | dx_simp | x_coord_a |
     /// | --: | ---: | --: | ------: | ------: | --------: |
-    /// |   A |  ACG |   0 |  4.9027 |  4.3488 |       0.0 |
+    /// |   A |  ACG |   0 |  4.9027 |  4.3488 |       N/A |
     /// |   C |  CGT |   1 |  6.9829 |  6.2895 |    4.9027 |
     /// |   G |  GTA |   2 |  7.3107 |  6.5847 |   11.8856 |
     /// |   T |  TAG |   3 |  6.5227 |  4.6879 |   19.1964 |
@@ -378,8 +385,8 @@ mod tests {
             .triplet_windows_iter(matrix::RollType::Active)
             .coords_iter()
             .collect();
-        assert_eq!(windows.len(), 7);
-        let expected_x_coord_a = vec![0.0, 4.9027, 11.8856, 19.1964, 25.7190, 26.4137, 22.8448];
+        assert_eq!(windows.len(), 6);
+        let expected_x_coord_a = vec![4.9027, 11.8856, 19.1964, 25.7190, 26.4137, 22.8448];
         for (i, window) in windows.iter().enumerate() {
             assert_abs_diff_eq!(window.x, expected_x_coord_a[i], epsilon = 1e-4);
         }
