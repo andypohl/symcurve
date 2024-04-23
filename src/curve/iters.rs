@@ -201,6 +201,21 @@ struct CoordsIter<I: Iterator> {
     prev_dy: f64,
 }
 
+impl<I: Iterator<Item = TripletData>> CoordsIter<I> {
+    /// Constructor for `CoordsIter`.
+    fn new(inner: I) -> Self {
+        CoordsIter {
+            inner,
+            head: false,
+            tail: false,
+            prev_x_coord: 0.0,
+            prev_y_coord: 0.0,
+            prev_dx: 0.0,
+            prev_dy: 0.0,
+        }
+    }
+}
+
 impl<I> Iterator for CoordsIter<I>
 where
     I: Iterator<Item = TripletData>,
