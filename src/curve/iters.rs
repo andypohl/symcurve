@@ -303,6 +303,123 @@ trait CoordsIterator: Iterator<Item = TripletData> + Sized {
 
 impl<I: Iterator<Item = TripletData>> CoordsIterator for I {}
 
+/// Represents the data for a rolling mean of the x and y coordinates.
+///
+/// # Layer 3
+///
+///
+struct RollMeanData {
+    x_bar: f64,
+    y_bar: f64,
+}
+
+struct RollMeanIter<I: Iterator> {
+    inner: I,
+    buffer: VecDeque<CoordsData>,
+    window_size: usize,
+    x_roll_sum: f64,
+    y_roll_sum: f64,
+}
+
+impl<I> Iterator for RollMeanIter<I>
+where
+    I: Iterator<Item = CoordsData>,
+{
+    type Item = RollMeanData;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // Fill the buffer with the next three items from the inner iterator.
+        while self.buffer.len() < self.window_size {
+            if let Some(item) = self.inner.next() {
+                self.x_roll_sum += item.x;
+                self.y_roll_sum += item.y;
+                self.buffer.push_back(item);
+            } else {
+                break;
+            }
+        }
+        if self.buffer.len() >= self.window_size {
+            let adj_x_roll_sum = self.x_roll_sum
+                - (0.5 * self.buffer.front().unwrap().x)
+                - (0.5 * self.buffer.back().unwrap().x);
+            let adj_y_roll_sum = self.y_roll_sum
+                - (0.5 * self.buffer.front().unwrap().y)
+                - (0.5 * self.buffer.back().unwrap().y);
+            let x_bar = adj_x_roll_sum / (self.window_size as f64 - 1 as f64);
+            let y_bar = adj_y_roll_sum / (self.window_size as f64 - 1 as f64);
+            let result = Some(RollMeanData { x_bar, y_bar });
+            let item = self.buffer.pop_front().unwrap();
+            self.x_roll_sum -= item.x;
+            self.y_roll_sum -= item.y;
+            result
+        } else {
+            None
+        }
+    }
+}
+
+trait RollMeanIterator: Iterator<Item = CoordsData> + Sized {
+    fn roll_mean_iter(self, window_size: usize) -> RollMeanIter<Self> {
+        RollMeanIter {
+            inner: self,
+            buffer: VecDeque::new(),
+            window_size,
+            x_roll_sum: 0.0,
+            y_roll_sum: 0.0,
+        }
+    }
+}
+
+impl<I: Iterator<Item = CoordsData>> RollMeanIterator for I {}
+
+struct EucDistIter<I: Iterator> {
+    inner: I,
+    buffer: VecDeque<RollMeanData>,
+    curve_step: usize,
+}
+
+impl<I> Iterator for EucDistIter<I>
+where
+    I: Iterator<Item = RollMeanData>,
+{
+    type Item = f64;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // Fill the buffer with the next three items from the inner iterator.
+        let window_size = self.curve_step * 2 + 1;
+        while self.buffer.len() < window_size {
+            if let Some(item) = self.inner.next() {
+                self.buffer.push_back(item);
+            } else {
+                break;
+            }
+        }
+        if self.buffer.len() >= window_size {
+            let left = self.buffer.front().unwrap();
+            let right = self.buffer.back().unwrap();
+            let curve = ((right.y_bar - left.y_bar).powf(2.0)
+                + (right.x_bar - left.x_bar).powf(2.0))
+            .sqrt();
+            self.buffer.pop_front();
+            Some(curve)
+        } else {
+            None
+        }
+    }
+}
+
+trait EucDistIterator: Iterator<Item = RollMeanData> + Sized {
+    fn curve_iter(self, curve_step: usize) -> EucDistIter<Self> {
+        EucDistIter {
+            inner: self,
+            buffer: VecDeque::new(),
+            curve_step,
+        }
+    }
+}
+
+impl<I: Iterator<Item = RollMeanData>> EucDistIterator for I {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
