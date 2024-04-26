@@ -11,8 +11,6 @@ use std::iter::Iterator;
 
 /// Represents the data for a triplet of nucleotides.
 ///
-/// # Layer 1
-///
 /// This struct contains the twist, roll, and tilt values for a triplet of nucleotides, as well as
 /// the deltas `dx` and `dy` and the roll type. *`roll_type` may be removed from this struct in the
 /// future to accommodate more-general matrix options.*
@@ -36,8 +34,6 @@ struct TripletData {
 }
 
 /// An iterator-wrapping struct that yields TripletData from an inner `u8` iterator.
-///
-/// # Layer 1
 ///
 /// `TripletWindowsIter` wraps around another iterator that yields `u8` (representing nucleotides),
 /// and looks up the roll/tilt/twist values for each triplet of nucleotides in the inner iterator,
@@ -122,11 +118,10 @@ where
 
 /// A trait for `u8` Iterators to yield `TripletData`.
 ///
-/// # Layer 1
-///
 /// `TripletWindowsIterator` is a trait for iterators over `u8` that provides a method for
 /// transforming the iterator into a `TripletWindowsIter`. This allows for convenient conversion
-/// of any iterator over `u8` into an iterator that yields triplets of nucleotides.
+/// of any iterator over `u8` into an iterator that yields triplets of nucleotides. This is
+/// **layer 1** of the iterator stack.
 ///
 /// # Type Parameters
 ///
@@ -151,8 +146,6 @@ impl<I: Iterator<Item = u8>> TripletWindowsIterator for I {}
 
 /// Represents the coordinates and associated data for a triplet of nucleotides.
 ///
-/// # Layer 2
-///
 /// `CoordsData` contains the x and y coordinates calculated from the `TripletData`, as well as
 /// the `TripletData` itself. The `TripletData` is optional, but is only None at the very end
 /// of the associated iterator.
@@ -169,9 +162,14 @@ struct CoordsData {
     y: f64,
 }
 
+impl CoordsData {
+    /// Constructor for `CoordsData`.
+    fn new(triplet_data: Option<TripletData>, x: f64, y: f64) -> Self {
+        CoordsData { triplet_data, x, y }
+    }
+}
+
 /// An iterator-wrapping struct that yields `CoordsData` from another iterator.
-///
-/// # Layer 2
 ///
 /// `CoordsIter` wraps around another iterator that yields `TripletData`, and yields `CoordsData`
 /// calculated from the `TripletData` and the previous coordinates and deltas. It also keeps track
@@ -224,8 +222,6 @@ where
 
     /// Implementation of `Iterator` trait for `CoordsIter` struct.
     ///
-    /// # Layer 2
-    ///
     /// This method first tries to get the next `TripletData` from the inner iterator. If there is a next item,
     /// it updates the previous deltas with the deltas from the current item and creates a new `CoordsData` with
     /// the current `TripletData`.
@@ -261,8 +257,6 @@ where
 {
     /// Creates a `CoordsData` instance from an optional `TripletData`.
     ///
-    /// # Layer 2
-    ///
     /// Helper to `CoordsIter::next()` that creates a `CoordsData` instance from the current
     /// `TripletData` and the previous coordinates.
     ///
@@ -288,11 +282,10 @@ where
 
 /// A trait for `TripletData` Iterators to yield `CoordsData`.
 ///
-/// # Layer 2
-///
 /// `CoordsIterator` is a trait for iterators over `TripletData` that provides a method for
 /// transforming the iterator into a `CoordsIter`. This allows for convenient conversion
-/// of any iterator over `TripletData` into an iterator that yields `CoordsData`.
+/// of any iterator over `TripletData` into an iterator that yields `CoordsData`. This
+/// is **layer 2** of the iterator stack.
 ///
 /// # Type Parameters
 ///
@@ -320,31 +313,57 @@ impl<I: Iterator<Item = TripletData>> CoordsIterator for I {}
 
 /// Represents the data for a rolling mean of the x and y coordinates.
 ///
-/// # Layer 3
+/// # Fields
 ///
-///
+/// * `x_bar`: The weighted mean of the x coordinates.
+/// * `y_bar`: The weighted mean of the y coordinates.
 struct RollMeanData {
     x_bar: f64,
     y_bar: f64,
 }
 
+/// Represents the data for a rolling mean of the x and y coordinates.
+///
+/// The `RollMeanData` struct contains the weighted x and y means for a window of coordinates
+/// that is 2 * `step_size` + 1 in length.
+///
+/// # Fields
+///
+/// * `inner`: The inner iterator that yields `CoordsData`.
+/// * `buffer`: A buffer that stores the current window of coordinates.
+/// * `step_size`: Half the size of the window minus one.  In other words,
+///   2 * `step_size` + 1 is the size of the window.
+/// * `x_roll_sum`: The sum of the x coordinates in the current window.
+/// * `y_roll_sum`: The sum of the y coordinates in the current window.
 struct RollMeanIter<I: Iterator> {
     inner: I,
     buffer: VecDeque<CoordsData>,
-    window_size: usize,
+    step_size: usize,
     x_roll_sum: f64,
     y_roll_sum: f64,
 }
 
+/// Implementation of the `Iterator` trait for `RollMeanIter`.
+///
+/// This iterator wraps another iterator of items of type `CoordsData` and computes
+/// a rolling mean of the `x` and `y` values of the items.
 impl<I> Iterator for RollMeanIter<I>
 where
     I: Iterator<Item = CoordsData>,
 {
     type Item = RollMeanData;
 
+    /// Computes the next item of the rolling mean iterator.
+    ///
+    /// This method computes the rolling mean of the `x` and `y` values of the next
+    /// `window_size` items from the inner iterator, where `window_size` is `step_size * 2 + 1`.
+    ///
+    /// The method returns `Some(RollMeanData)` if there are enough items in the inner iterator,
+    /// and `None` otherwise.
     fn next(&mut self) -> Option<Self::Item> {
         // Fill the buffer with the next three items from the inner iterator.
-        while self.buffer.len() < self.window_size {
+        let window_size = self.step_size * 2 + 1;
+        while self.buffer.len() < window_size {
             if let Some(item) = self.inner.next() {
                 self.x_roll_sum += item.x;
                 self.y_roll_sum += item.y;
@@ -353,15 +372,16 @@ where
                 break;
             }
         }
-        if self.buffer.len() >= self.window_size {
+        if self.buffer.len() >= window_size {
+            // get the fron/back items without removing them and adjust the roll sum
             let adj_x_roll_sum = self.x_roll_sum
                 - (0.5 * self.buffer.front().unwrap().x)
                 - (0.5 * self.buffer.back().unwrap().x);
             let adj_y_roll_sum = self.y_roll_sum
                 - (0.5 * self.buffer.front().unwrap().y)
                 - (0.5 * self.buffer.back().unwrap().y);
-            let x_bar = adj_x_roll_sum / (self.window_size as f64 - 1 as f64);
-            let y_bar = adj_y_roll_sum / (self.window_size as f64 - 1 as f64);
+            let x_bar = adj_x_roll_sum / (window_size as f64 - 1 as f64);
+            let y_bar = adj_y_roll_sum / (window_size as f64 - 1 as f64);
             let result = Some(RollMeanData { x_bar, y_bar });
             let item = self.buffer.pop_front().unwrap();
             self.x_roll_sum -= item.x;
@@ -373,12 +393,30 @@ where
     }
 }
 
+/// A trait for iterators that can compute a rolling mean of `CoordsData`.
+///
+/// This trait extends the `Iterator` trait, adding a `roll_mean_iter` method that
+/// wraps the iterator in a `RollMeanIter`. The `RollMeanIter` computes a rolling mean
+/// of the `x` and `y` values of the items from the original iterator.
 trait RollMeanIterator: Iterator<Item = CoordsData> + Sized {
-    fn roll_mean_iter(self, window_size: usize) -> RollMeanIter<Self> {
+    /// Wraps the iterator in a `RollMeanIter`.
+    ///
+    /// This method takes ownership of the iterator and returns a `RollMeanIter` that
+    /// computes a rolling mean of the `x` and `y` values of the items from the original iterator.
+    ///
+    /// # Parameters
+    ///
+    /// * `step_size`: half of the window size minus one. In other words, 2 * `step_size` + 1 is
+    ///  the size of the window.
+    ///
+    /// # Returns
+    ///
+    /// A `RollMeanIter` that computes a rolling mean of the `x` and `y` values of the items.
+    fn roll_mean_iter(self, step_size: usize) -> RollMeanIter<Self> {
         RollMeanIter {
             inner: self,
             buffer: VecDeque::new(),
-            window_size,
+            step_size,
             x_roll_sum: 0.0,
             y_roll_sum: 0.0,
         }
@@ -387,10 +425,22 @@ trait RollMeanIterator: Iterator<Item = CoordsData> + Sized {
 
 impl<I: Iterator<Item = CoordsData>> RollMeanIterator for I {}
 
+/// An iterator that computes the Euclidean distance between items.
+///
+/// `EucDistIter` wraps another iterator that yields `RollMeanData`. It computes the Euclidean
+/// distance between each pair of items from the inner iterator.
+///
+/// # Fields
+///
+/// * `inner`: The inner iterator that yields `RollMeanData`.
+///
+/// * `buffer`: A buffer that stores 2 * `curve_step_size` + 1 items from the inner iterator.
+///
+/// * `curve_step_size`: The distance from the midpoint base in the window.  
 struct EucDistIter<I: Iterator> {
     inner: I,
     buffer: VecDeque<RollMeanData>,
-    curve_step: usize,
+    curve_step_size: usize,
 }
 
 impl<I> Iterator for EucDistIter<I>
@@ -399,9 +449,17 @@ where
 {
     type Item = f64;
 
+    /// Computes the next item of the Euclidean distance iterator.
+    ///
+    /// This method computes the Euclidean distance between each pair of consecutive items
+    /// from the inner iterator. The Euclidean distance is computed as the square root of
+    /// the sum of the squares of the differences of the `x_bar` and `y_bar` values of the items.
+    ///
+    /// The method returns `Some(f64)` if there are enough items in the inner iterator,
+    /// and `None` otherwise.
     fn next(&mut self) -> Option<Self::Item> {
         // Fill the buffer with the next three items from the inner iterator.
-        let window_size = self.curve_step * 2 + 1;
+        let window_size = self.curve_step_size * 2 + 1;
         while self.buffer.len() < window_size {
             if let Some(item) = self.inner.next() {
                 self.buffer.push_back(item);
@@ -424,21 +482,50 @@ where
 }
 
 trait EucDistIterator: Iterator<Item = RollMeanData> + Sized {
-    fn curve_iter(self, curve_step: usize) -> EucDistIter<Self> {
+    fn euc_dist_iter(self, curve_step_size: usize) -> EucDistIter<Self> {
         EucDistIter {
             inner: self,
             buffer: VecDeque::new(),
-            curve_step,
+            curve_step_size,
         }
     }
 }
 
 impl<I: Iterator<Item = RollMeanData>> EucDistIterator for I {}
 
+pub struct CurveIter<I: Iterator<Item = u8>> {
+    inner: EucDistIter<RollMeanIter<CoordsIter<TripletWindowsIter<I>>>>,
+}
+
+impl<I: Iterator<Item = u8>> Iterator for CurveIter<I> {
+    type Item = f64;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next()
+    }
+}
+
+impl<I: Iterator<Item = u8>> CurveIter<I> {
+    fn new(
+        seq_iter: I,
+        roll_type: matrix::RollType,
+        step_size: usize,
+        curve_step_size: usize,
+    ) -> Self {
+        Self {
+            inner: seq_iter
+                .triplet_windows_iter(roll_type)
+                .coords_iter()
+                .roll_mean_iter(step_size)
+                .euc_dist_iter(curve_step_size),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use approx::assert_abs_diff_eq;
+    use approx::{assert_abs_diff_eq, assert_relative_eq};
 
     /// Test the Triplet iterator:
     ///
@@ -521,7 +608,88 @@ mod tests {
         assert_eq!(windows.len(), 6);
         let expected_x_coord_a = vec![4.9027, 11.8856, 19.1964, 25.7190, 26.4137, 22.8448];
         for (i, window) in windows.iter().enumerate() {
-            assert_abs_diff_eq!(window.x, expected_x_coord_a[i], epsilon = 1e-4);
+            assert_relative_eq!(window.x, expected_x_coord_a[i], epsilon = 1e-4);
         }
+    }
+
+    /// Helper for test_rollmean_iter() avoids need to derive Clone for CoordsData.
+    fn get_some_coords() -> Vec<CoordsData> {
+        let coords: Vec<CoordsData> = vec![
+            CoordsData::new(None, 1.0, 0.0),
+            CoordsData::new(None, 2.0, 0.0),
+            CoordsData::new(None, 3.0, 0.0), // start if step_size = 2
+            CoordsData::new(None, 4.0, 0.0), // start if step_size = 3
+            CoordsData::new(None, 5.0, 0.0),
+            CoordsData::new(None, 6.0, 0.0),
+            CoordsData::new(None, 7.0, 10.0),
+            CoordsData::new(None, 8.0, 10.0),
+            CoordsData::new(None, 9.0, 10.0), // end if step_size = 3
+            CoordsData::new(None, 10.0, 10.0), // end if step_size = 2
+            CoordsData::new(None, 11.0, 10.0),
+            CoordsData::new(None, 12.0, 10.0),
+        ];
+        coords
+    }
+
+    #[test]
+    fn test_rollmean_iter() {
+        let rolls: Vec<_> = get_some_coords().into_iter().roll_mean_iter(2).collect();
+        assert_eq!(rolls.len(), 8);
+        // x̄₃ = (½x₁ + x₂ + x₃ + x₄ + ½x₅)/4
+        // x̄₃ = (0.5 + 2 + 3 + 4 + 2.5)/4 = 3
+        assert_relative_eq!(rolls[0].x_bar, 3.0, epsilon = 1e-4);
+        assert_relative_eq!(rolls[0].y_bar, 0.0, epsilon = 1e-4);
+        // x̄₃ = (½x₂ + x₃ + x₄ + x₅ + ½x₆)/4
+        // x̄₃ = (1 + 3 + 4 + 5 + 3)/4 = 16 / 4 = 4
+        assert_relative_eq!(rolls[1].x_bar, 4.0, epsilon = 1e-4);
+        assert_relative_eq!(rolls[2].x_bar, 5.0, epsilon = 1e-4);
+        assert_relative_eq!(rolls[7].y_bar, 10.0, epsilon = 1e-4);
+        let rolls: Vec<_> = get_some_coords().into_iter().roll_mean_iter(3).collect();
+        // x̄₃ = (½x₁ + x₂ + x₃ + x₄ + x₅ + x₆+ ½x₇)/6
+        // x̄₃ = (0.5 + 2 + 3 + 4 + 5 + 6 + 3.5)/6 = 24 / 6 = 4
+        assert_relative_eq!(rolls[0].x_bar, 4.0, epsilon = 1e-4);
+        assert_eq!(rolls.len(), 6);
+    }
+
+    fn get_some_means() -> Vec<RollMeanData> {
+        let means = vec![
+            RollMeanData {
+                x_bar: 3.0,
+                y_bar: 0.0,
+            },
+            RollMeanData {
+                x_bar: 4.0,
+                y_bar: 0.0,
+            },
+            RollMeanData {
+                x_bar: 5.0,
+                y_bar: 0.0,
+            },
+            RollMeanData {
+                x_bar: 6.0,
+                y_bar: 0.0,
+            },
+            RollMeanData {
+                x_bar: 7.0,
+                y_bar: 10.0,
+            },
+            RollMeanData {
+                x_bar: 8.0,
+                y_bar: 10.0,
+            },
+            RollMeanData {
+                x_bar: 9.0,
+                y_bar: 10.0,
+            },
+            RollMeanData {
+                x_bar: 10.0,
+                y_bar: 10.0,
+            },
+            RollMeanData {
+                x_bar: 11.0,
+                y_bar: 10.0,
+            },
+        ];
+        means
     }
 }
