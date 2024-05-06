@@ -541,51 +541,81 @@ impl<I: Iterator<Item = u8>> CurveIter<I> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use approx::{assert_abs_diff_eq, assert_relative_eq};
+    use approx::assert_relative_eq;
 
-    /// Test the Triplet iterator:
+    /// Below is a table of some of the expected values for the coords iterator over the DNA
     ///
-    /// Below is a table of some of the expected values for the triplet iterator over the DNA
-    /// sequence "ACGTAGGT".
-    ///
-    /// | Nuc | Trip | pos |   ixs |  twist | roll a | roll s | twist_sm |  dx_act | dx_simp |
-    /// | --: | ---: | --: | ----: | -----: | -----: | -----: | -------: | ------: | ------: |
-    /// |   A |  ACG |   0 | 0,1,2 | 0.5986 |    8.7 | 7.7171 |   0.5986 |  4.9027 |  4.3488 |
-    /// |   C |  CGT |   1 | 1,2,3 | 0.5986 |    7.5 | 6.7552 |   1.1972 |  6.9829 |  6.2895 |
-    /// |   G |  GTA |   2 | 2,3,0 | 0.5986 |    7.5 | 6.7552 |   1.7958 |  7.3107 |  6.5847 |
-    /// |   T |  TAG |   3 | 3,0,2 | 0.5986 |    9.6 | 6.8996 |   2.3944 |  6.5227 |  4.6879 |
-    /// |   A |  AGG |   4 | 0,2,2 | 0.5986 |    4.7 | 5.0523 |   2.9930 |  0.6947 |  0.7468 |
-    /// |   G |  GGT |   5 | 2,2,3 | 0.5986 |    8.2 | 9.0823 |   3.5916 | -3.5689 | -3.9529 |
-    /// |   G |  N/A |   6 |   N/A | 0.5986 |    N/A |    N/A |      N/A |     N/A |     N/A |
-    /// |   T |  N/A |   7 |   N/A | 0.5986 |    N/A |    N/A |      N/A |     N/A |     N/A |
+    /// | pos|nuc|trip | ixs |  twist |  roll_s |   tilt |twist_sum| dx_simp | dy_simp |
+    /// | --:| -:| --: | --: | -----: | ------: | -----: | ------: | ------: | ------: |
+    /// |  0 | C | CCA | 330 | 0.5986 |  0.7000 | 0.0000 |  0.5986 |  0.3945 |  0.5783 |
+    /// |  1 | C | CAA | 300 | 0.5986 |  6.2000 | 0.0000 |  1.1973 |  5.7725 |  2.2622 |
+    /// |  2 | A | AAC | 003 | 0.5986 |  1.6000 | 0.0000 |  1.7959 |  1.5596 | -0.3572 |
+    /// |  3 | A | ACA | 030 | 0.5986 |  5.8000 | 0.0000 |  2.3946 |  3.9408 | -4.2556 |
+    /// |  4 | C | CAT | 301 | 0.5986 |  8.7000 | 0.0000 |  2.9932 |  1.2860 | -8.6044 |
+    /// |  5 | A | ATT | 011 | 0.5986 |  0.0000 | 0.0000 |  3.5919 |  0.0000 |  0.0000 |
+    /// |  6 | T | TTT | 111 | 0.5986 |  0.1000 | 0.0000 |  4.1905 | -0.0867 | -0.0498 |
+    /// |  7 | T | TTT | 111 | 0.5986 |  0.1000 | 0.0000 |  4.7892 | -0.0997 |  0.0077 |
+    /// |  8 | T | TTG | 112 | 0.5986 |  6.2000 | 0.0000 |  5.3878 | -4.8387 |  3.8765 |
+    /// |  9 | T | TGA | 120 | 0.5986 | 10.0000 | 0.0000 |  5.9865 | -2.9238 |  9.5630 |
+    /// | 10 | G | GAC | 203 | 0.5986 |  5.6000 | 0.0000 |  6.5851 |  1.6653 |  5.3467 |
+    /// | 11 | A | ACT | 031 | 0.5986 |  2.0000 | 0.0000 |  7.1838 |  1.5674 |  1.2423 |
+    /// | 12 | C | CTT | 311 | 0.5986 |  4.2000 | 0.0000 |  7.7824 |  4.1892 |  0.3003 |
+    /// | 13 | T | TTT | 111 | 0.5986 |  0.1000 | 0.0000 |  8.3811 |  0.0864 | -0.0503 |
+    /// | 14 | T | TTT | 111 | 0.5986 |  0.1000 | 0.0000 |  8.9797 |  0.0431 | -0.0903 |
+    /// | 15 | T | TTT | 111 | 0.5986 |  0.1000 | 0.0000 |  9.5784 | -0.0153 | -0.0988 |
+    /// | 16 | T | TTG | 112 | 0.5986 |  6.2000 | 0.0000 | 10.1770 | -4.2363 | -4.5270 |
+    /// | 17 | T | TGG | 122 | 0.5986 |  0.7000 | 0.0000 | 10.7757 | -0.6831 | -0.1527 |
+    /// | 18 | G | GGG | 222 | 0.5986 |  5.7000 | 0.0000 | 11.3743 | -5.2961 |  2.1075 |
+    /// | 19 | G | GGA | 220 | 0.5986 |  6.2000 | 0.0000 | 11.9729 | -3.4670 |  5.1400 |
+    /// | 20 | G | GAG | 202 | 0.5986 |  6.6000 | 0.0000 | 12.5716 |  0.0345 |  6.5999 |
+    /// | 21 | A | AGG | 022 | 0.5986 |  4.7000 | 0.0000 | 13.1702 |  2.6688 |  3.8688 |
+    /// | 22 | G | GGG | 222 | 0.5986 |  5.7000 | 0.0000 | 13.7689 |  5.3178 |  2.0520 |
+    /// | 23 | G | GGC | 223 | 0.5986 |  8.2000 | 0.0000 | 14.3675 |  7.9834 | -1.8724 |
+    /// | 24 | G | GCA | 230 | 0.5986 |  7.5000 | 0.0000 | 14.9662 |  5.0670 | -5.5295 |
+    /// | 25 | C | CAC | 303 | 0.5986 |  6.8000 | 0.0000 | 15.5648 |  0.9700 | -6.7305 |
+    /// | 26 | A | ACT | 031 | 0.5986 |  2.0000 | 0.0000 | 16.1635 | -0.8799 | -1.7961 |
+    /// | 27 | C | CTA | 310 | 0.5986 |  7.8000 | 0.0000 | 16.7621 | -6.7820 | -3.8528 |
+    /// | 28 | T | TAG | 102 | 0.5986 |  7.8000 | 0.0000 | 17.3608 | -7.7738 |  0.6390 |
+    /// | 29 | A | AGC | 023 | 0.5986 |  6.3000 | 0.0000 | 17.9594 | -4.8961 |  3.9646 |
+    /// | 30 | G | GCA | 230 | 0.5986 |  7.5000 | 0.0000 | 18.5581 | -2.1553 |  7.1836 |
+    /// | 31 | C | CAC | 303 | 0.5986 |  6.8000 | 0.0000 | 19.1567 |  2.0560 |  6.4817 |
+    /// | 32 | A | ACC | 033 | 0.5986 |  5.2000 | 0.0000 | 19.7554 |  4.0920 |  3.2087 |
+    /// | 33 | C | CCT | 331 | 0.5986 |  4.7000 | 0.0000 | 20.3540 |  4.6897 |  0.3116 |
+    /// | 34 | C | CTA | 310 | 0.5986 |  7.8000 | 0.0000 | 20.9527 |  6.7208 | -3.9587 |
+    /// | 35 | T | TAT | 101 | 0.5986 |  9.7000 | 0.0000 | 21.5513 |  4.1302 | -8.7767 |
+    /// | 36 | A | ATC | 013 | 0.5986 |  3.6000 | 0.0000 | 22.1500 | -0.5693 | -3.5547 |
+    /// | 37 | T | TCT | 131 | 0.5986 |  6.5000 | 0.0000 | 22.7486 | -4.4660 | -4.7228 |
+    /// | 38 | C | CTA | 310 | 0.5986 |  7.8000 | 0.0000 | 23.3472 | -7.6209 | -1.6618 |
+    /// | 39 | T | TAC | 103 | 0.5986 |  6.4000 | 0.0000 | 23.9459 | -5.9340 |  2.3974 |
+    /// | 40 | A | ACC | 033 | 0.5986 |  5.2000 | 0.0000 | 24.5445 | -2.8853 |  4.3261 |
+    /// | 41 | C | CCC | 333 | 0.5986 |  5.7000 | 0.0000 | 25.1432 |  0.0596 |  5.6997 |
+    /// | 42 | C | CCT | 331 | 0.5986 |  4.7000 | 0.0000 | 25.7418 |  2.6890 |  3.8548 |
+    /// | 43 | C | CTG | 312 | 0.5986 |  9.6000 | 0.0000 | 26.3405 |  8.9743 |  3.4092 |
+    /// | 44 | T | TGA | 120 | 0.5986 | 10.0000 | 0.0000 | 26.9391 |  9.7238 | -2.3342 |
+    /// | 45 | G | GAA | 200 | 0.5986 |  5.1000 | 0.0000 | 27.5378 |  3.4259 | -3.7780 |
+    /// | 46 | A | AAT | 001 | 0.5986 |  0.0000 | 0.0000 | 28.1364 |  0.0000 |  0.0000 |
+    /// | 47 | A | ATC | 013 | 0.5986 |  3.6000 | 0.0000 | 28.7351 | -1.6006 | -3.2246 |
+    /// | 48 | T |     |     |         |        |        |         |         |         |
+    /// | 49 | C |     |     |         |        |        |         |         |         |
     #[test]
-    fn test_triplet_iter() {
-        let dna = b"ACGTAGGT";
+    fn test_triplet_iter_long() {
+        let dna = b"CCAACATTTTGACTTTTTGGGAGGGCACTAGCACCTATCTACCCTGAATC";
         let windows: Vec<TripletData> = dna
             .iter()
             .cloned()
             .triplet_windows_iter(matrix::RollType::Simple)
             .collect();
-        assert_eq!(windows.len(), 6);
-        let expected_rolls = vec![7.7171, 6.75525, 6.75525, 6.8996, 5.0523, 9.0823];
-        let expected_dx = vec![4.3488, 6.2895, 6.58475, 4.68788, 0.74679, -3.9529];
-        for (i, window) in windows.iter().enumerate() {
-            assert_abs_diff_eq!(window.roll, expected_rolls[i], epsilon = 1e-6);
-            assert_abs_diff_eq!(window.dx, expected_dx[i], epsilon = 1e-4);
-        }
-        assert_abs_diff_eq!(windows[0].twist, 0.5986474, epsilon = 1e-6);
-        let windows: Vec<TripletData> = dna
-            .iter()
-            .cloned()
-            .triplet_windows_iter(matrix::RollType::Active)
-            .collect();
-        let expected_rolls = vec![8.7, 7.5, 7.5, 9.6, 4.7, 8.2];
-        let expected_dx = vec![4.9027, 6.9829, 7.3107, 6.5227, 0.69471, -3.56887];
-        assert_eq!(windows.len(), 6);
-        for (i, window) in windows.iter().enumerate() {
-            assert_abs_diff_eq!(window.roll, expected_rolls[i], epsilon = 1e-6);
-            assert_abs_diff_eq!(window.dx, expected_dx[i], epsilon = 1e-4);
-        }
+        assert_eq!(windows.len(), dna.len() - 2);
+        // check first two
+        assert_relative_eq!(windows[0].dx, 0.3945, epsilon = 1e-4);
+        assert_relative_eq!(windows[0].dy, 0.5783, epsilon = 1e-4);
+        assert_relative_eq!(windows[1].dx, 5.7725, epsilon = 1e-4);
+        assert_relative_eq!(windows[1].dy, 2.2622, epsilon = 1e-4);
+        // check last two
+        assert_relative_eq!(windows[46].dx, 0.0000, epsilon = 1e-4);
+        assert_relative_eq!(windows[46].dy, 0.0000, epsilon = 1e-4);
+        assert_relative_eq!(windows[47].dx, -1.6006, epsilon = 1e-4);
+        assert_relative_eq!(windows[47].dy, -3.2246, epsilon = 1e-4);
     }
 
     #[test]
@@ -600,35 +630,80 @@ mod tests {
     }
 
     /// Below is a table of some of the expected values for the coords iterator over the DNA
-    /// sequence "ACGTAGGT".
     ///
-    /// | Nuc | Trip | pos |  dx_act | dx_simp | x_coord_a |
-    /// | --: | ---: | --: | ------: | ------: | --------: |
-    /// |   A |  ACG |   0 |  4.9027 |  4.3488 |       N/A |
-    /// |   C |  CGT |   1 |  6.9829 |  6.2895 |    4.9027 |
-    /// |   G |  GTA |   2 |  7.3107 |  6.5847 |   11.8856 |
-    /// |   T |  TAG |   3 |  6.5227 |  4.6879 |   19.1964 |
-    /// |   A |  AGG |   4 |  0.6947 |  0.7468 |   25.7190 |
-    /// |   G |  GGT |   5 | -3.5689 | -3.9529 |   26.4137 |
-    /// |   G |  N/A |   6 |     N/A |     N/A |   22.8449 |
-    /// |   T |  N/A |   7 |     N/A |     N/A |       N/A |
+    /// | pos|nuc|trip | dx_simp | dy_simp |  x_coord |  y_coord |
+    /// | --:| -:| --: | ------: | ------: | -------: | -------: |
+    /// |  0 | C | CCA |  0.3945 |  0.5783 |          |          |
+    /// |  1 | C | CAA |  5.7725 |  2.2622 |   0.3945 |   0.5783 |
+    /// |  2 | A | AAC |  1.5596 | -0.3572 |   6.1670 |   2.8405 |
+    /// |  3 | A | ACA |  3.9408 | -4.2556 |   7.7266 |   2.4833 |
+    /// |  4 | C | CAT |  1.2860 | -8.6044 |  11.6674 |  -1.7723 |
+    /// |  5 | A | ATT |  0.0000 |  0.0000 |  12.9534 | -10.3767 |
+    /// |  6 | T | TTT | -0.0867 | -0.0498 |  12.9534 | -10.3767 |
+    /// |  7 | T | TTT | -0.0997 |  0.0077 |  12.8667 | -10.4266 |
+    /// |  8 | T | TTG | -4.8387 |  3.8765 |  12.7670 | -10.4189 |
+    /// |  9 | T | TGA | -2.9238 |  9.5630 |   7.9283 |  -6.5424 |
+    /// | 10 | G | GAC |  1.6653 |  5.3467 |   5.0045 |   3.0206 |
+    /// | 11 | A | ACT |  1.5674 |  1.2423 |   6.6698 |   8.3673 |
+    /// | 12 | C | CTT |  4.1892 |  0.3003 |   8.2372 |   9.6096 |
+    /// | 13 | T | TTT |  0.0864 | -0.0503 |  12.4264 |   9.9099 |
+    /// | 14 | T | TTT |  0.0431 | -0.0903 |  12.5128 |   9.8596 |
+    /// | 15 | T | TTT | -0.0153 | -0.0988 |  12.5559 |   9.7693 |
+    /// | 16 | T | TTG | -4.2363 | -4.5270 |  12.5406 |   9.6705 |
+    /// | 17 | T | TGG | -0.6831 | -0.1527 |   8.3043 |   5.1435 |
+    /// | 18 | G | GGG | -5.2961 |  2.1075 |   7.6212 |   4.9908 |
+    /// | 19 | G | GGA | -3.4670 |  5.1400 |   2.3251 |   7.0983 |
+    /// | 20 | G | GAG |  0.0345 |  6.5999 |  -1.1419 |  12.2383 |
+    /// | 21 | A | AGG |  2.6688 |  3.8688 |  -1.1074 |  18.8382 |
+    /// | 22 | G | GGG |  5.3178 |  2.0520 |   1.5614 |  22.7069 |
+    /// | 23 | G | GGC |  7.9834 | -1.8724 |   6.8792 |  24.7590 |
+    /// | 24 | G | GCA |  5.0670 | -5.5295 |  14.8626 |  22.8866 |
+    /// | 25 | C | CAC |  0.9700 | -6.7305 |  19.9296 |  17.3571 |
+    /// | 26 | A | ACT | -0.8799 | -1.7961 |  20.8995 |  10.6266 |
+    /// | 27 | C | CTA | -6.7820 | -3.8528 |  20.0197 |   8.8305 |
+    /// | 28 | T | TAG | -7.7738 |  0.6390 |  13.2377 |   4.9777 |
+    /// | 29 | A | AGC | -4.8961 |  3.9646 |   5.4639 |   5.6167 |
+    /// | 30 | G | GCA | -2.1553 |  7.1836 |   0.5678 |   9.5814 |
+    /// | 31 | C | CAC |  2.0560 |  6.4817 |  -1.5875 |  16.7650 |
+    /// | 32 | A | ACC |  4.0920 |  3.2087 |   0.4685 |  23.2467 |
+    /// | 33 | C | CCT |  4.6897 |  0.3116 |   4.5605 |  26.4554 |
+    /// | 34 | C | CTA |  6.7208 | -3.9587 |   9.2502 |  26.7669 |
+    /// | 35 | T | TAT |  4.1302 | -8.7767 |  15.9709 |  22.8083 |
+    /// | 36 | A | ATC | -0.5693 | -3.5547 |  20.1012 |  14.0315 |
+    /// | 37 | T | TCT | -4.4660 | -4.7228 |  19.5319 |  10.4768 |
+    /// | 38 | C | CTA | -7.6209 | -1.6618 |  15.0659 |   5.7540 |
+    /// | 39 | T | TAC | -5.9340 |  2.3974 |   7.4450 |   4.0922 |
+    /// | 40 | A | ACC | -2.8853 |  4.3261 |   1.5109 |   6.4896 |
+    /// | 41 | C | CCC |  0.0596 |  5.6997 |  -1.3743 |  10.8157 |
+    /// | 42 | C | CCT |  2.6890 |  3.8548 |  -1.3148 |  16.5154 |
+    /// | 43 | C | CTG |  8.9743 |  3.4092 |   1.3742 |  20.3701 |
+    /// | 44 | T | TGA |  9.7238 | -2.3342 |  10.3485 |  23.7794 |
+    /// | 45 | G | GAA |  3.4259 | -3.7780 |  20.0722 |  21.4451 |
+    /// | 46 | A | AAT |  0.0000 |  0.0000 |  23.4981 |  17.6671 |
+    /// | 47 | A | ATC | -1.6006 | -3.2246 |  23.4981 |  17.6671 |
+    /// | 48 | T |     |         |         |  21.8975 |  14.4425 |
+    /// | 49 | C |     |         |         |          |          |
     #[test]
     fn test_coords_iter() {
-        let dna = b"ACGTAGGT";
+        let dna = b"CCAACATTTTGACTTTTTGGGAGGGCACTAGCACCTATCTACCCTGAATC";
         let windows: Vec<CoordsData> = dna
             .iter()
             .cloned()
-            .triplet_windows_iter(matrix::RollType::Active)
+            .triplet_windows_iter(matrix::RollType::Simple)
             .coords_iter()
             .collect();
-        assert_eq!(windows.len(), 6);
-        let expected_x_coord_a = vec![4.9027, 11.8856, 19.1964, 25.7190, 26.4137, 22.8448];
-        for (i, window) in windows.iter().enumerate() {
-            assert_relative_eq!(window.x, expected_x_coord_a[i], epsilon = 1e-4);
-        }
+        assert_eq!(windows.len(), dna.len() - 2);
+        assert_relative_eq!(windows[0].x, 0.3945, epsilon = 1e-4);
+        assert_relative_eq!(windows[0].y, 0.5783, epsilon = 1e-4);
+        assert_relative_eq!(windows[1].x, 6.1670, epsilon = 1e-4);
+        assert_relative_eq!(windows[1].y, 2.8405, epsilon = 1e-4);
+        assert_relative_eq!(windows[46].x, 23.4981, epsilon = 1e-4);
+        assert_relative_eq!(windows[46].y, 17.6671, epsilon = 1e-4);
+        assert_relative_eq!(windows[47].x, 21.8975, epsilon = 1e-4);
+        assert_relative_eq!(windows[47].y, 14.4425, epsilon = 1e-4);
     }
 
-    /// Helper for test_rollmean_iter() avoids need to derive Clone for CoordsData.
+    /// Helper for test_rollmean_iter()
     fn get_some_coords() -> Vec<CoordsData> {
         let x_values = vec![
             1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
@@ -664,7 +739,7 @@ mod tests {
         assert_eq!(rolls.len(), 6);
     }
 
-    /// Helper for test_eucdist_iter() avoids need to derive Clone for RollMeanData.
+    /// Helper for test_eucdist_iter()
     fn get_some_means() -> Vec<RollMeanData> {
         let x_values = vec![3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 8.0, 5.0, 17.0];
         let y_values = vec![0.0, 0.0, 0.0, 0.0, 10.0, 10.0, 10.0, 10.0, 10.0];
@@ -697,5 +772,14 @@ mod tests {
         assert_relative_eq!(euc_dists[3], 10.04988, epsilon = 1e-4);
         // √((17.0-7.0)² + (10.0-10.0)²) = √100 = 10.0
         assert_relative_eq!(euc_dists[4], 10.0, epsilon = 1e-4);
+    }
+
+    #[test]
+    fn test_curve_iter() {
+        let seq = b"CCAACATTTTGACTTTTTGGGAGGGCACTAGCACCTATCTACCCTGAATC";
+        let seq_len = seq.len();
+        let curves: Vec<_> =
+            CurveIter::new(seq.iter().cloned(), matrix::RollType::Simple, 5, 15).collect();
+        assert_eq!(curves.len(), seq_len - (21 * 2));
     }
 }
