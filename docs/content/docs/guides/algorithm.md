@@ -62,8 +62,7 @@ y_{i+1} &= y_i + dy_i
 where \(x_1 = y_1 = 0\). Note: the range of valid coordinates \(i\) extends to \(n-1\), which is one past the number of 3-mer windows. For this reason,
 \(x_1\) and \(y_1\) are ignored in subsequent steps.
 ### Rolling coordinate averages
-We'll now define parameters \(a\) and \(b\), where \(2b+3\) is a sliding window size over the range of coordinates \(a \lt i \lt n-a\). Usually we set \(a=6\) and \(b=4\), but here they're made variable for the sake of illustration and can be set with alternate values as long as \(a-b=2\) and \(2(a+b+1) \ll n\).
-The rolling averages \(\overline{x}\) and \(\overline{y}\) are also slightly weighted centrally,
+We'll now define parameters \(a\) and \(b\), where \(a=2b+1\) is a sliding window size over the range of coordinates \(b+1 \lt i \lt n-b-1\). Usually we set \(a=11\) which means \(b=5\).The rolling averages \(\overline{x}\) and \(\overline{y}\) are also slightly weighted centrally,
 with the values at either end of the window only contributing half what the central values contribute.
 
 \[
@@ -75,7 +74,7 @@ with the values at either end of the window only contributing half what the cent
 
 ### Curvature
 Using the rolling averages, the curvature values \(\kappa_i\) are now possible to calculate over a range of
-\(a+c < i < n-a-c\) where \(c\), is another span, usually set to 15.
+\(b+c+1 < i < n-b-c-1\) where \(c\), is another span, usually set to 15.
 
 \[
 \kappa_i = \sqrt{(\overline{x}_{i+c}-\overline{x}_{i-c})^2 + (\overline{y}_{i+c}-\overline{y}_{i-c})^2}
