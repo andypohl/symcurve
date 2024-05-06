@@ -425,7 +425,7 @@ trait RollMeanIterator: Iterator<Item = CoordsData> + Sized {
 
 impl<I: Iterator<Item = CoordsData>> RollMeanIterator for I {}
 
-/// An iterator that computes the Euclidean distance between items.
+/// An iterator that computes the Euclidean distance between pairs of items from an inner iterator.
 ///
 /// `EucDistIter` wraps another iterator that yields `RollMeanData`. It computes the Euclidean
 /// distance between each pair of items from the inner iterator.
@@ -493,6 +493,14 @@ trait EucDistIterator: Iterator<Item = RollMeanData> + Sized {
 
 impl<I: Iterator<Item = RollMeanData>> EucDistIterator for I {}
 
+/// An iterator that computes the curvature of a DNA sequence.
+///
+/// `CurveIter` wraps an iterator that yields `u8` and computes the curvature of the DNA sequence
+/// represented by the nucleotides.
+///
+/// # Fields
+///
+/// * `inner`: The inner iterator that yields `u8`.
 pub struct CurveIter<I: Iterator<Item = u8>> {
     inner: EucDistIter<RollMeanIter<CoordsIter<TripletWindowsIter<I>>>>,
 }
@@ -500,24 +508,32 @@ pub struct CurveIter<I: Iterator<Item = u8>> {
 impl<I: Iterator<Item = u8>> Iterator for CurveIter<I> {
     type Item = f64;
 
+    /// Computes the next item of the curvature iterator.
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()
     }
 }
 
+/// Construct a `CurveIter` from an iterator that yields `u8`.
+///
+/// This function constructs a `CurveIter` from an iterator that yields `u8`. The `CurveIter`
+/// computes the curvature of the DNA sequence represented by the nucleotides.
+///
+/// # Parameters
+///
+/// * `seq_iter`: An iterator that yields `u8`.
+/// * `roll_type`: The type of roll (either simple or activated).
+/// * `step_b`: Half of the window size minus one. In other words, 2 * `step_size` + 1 is
+///  the size of the window.
+/// * `step_c`: The distance from the midpoint base to the sides in the curve window.
 impl<I: Iterator<Item = u8>> CurveIter<I> {
-    fn new(
-        seq_iter: I,
-        roll_type: matrix::RollType,
-        step_size: usize,
-        curve_step_size: usize,
-    ) -> Self {
+    fn new(seq_iter: I, roll_type: matrix::RollType, step_b: usize, step_c: usize) -> Self {
         Self {
             inner: seq_iter
                 .triplet_windows_iter(roll_type)
                 .coords_iter()
-                .roll_mean_iter(step_size)
-                .euc_dist_iter(curve_step_size),
+                .roll_mean_iter(step_b)
+                .euc_dist_iter(step_c),
         }
     }
 }
@@ -614,21 +630,18 @@ mod tests {
 
     /// Helper for test_rollmean_iter() avoids need to derive Clone for CoordsData.
     fn get_some_coords() -> Vec<CoordsData> {
-        let coords: Vec<CoordsData> = vec![
-            CoordsData::new(None, 1.0, 0.0),
-            CoordsData::new(None, 2.0, 0.0),
-            CoordsData::new(None, 3.0, 0.0), // start if step_size = 2
-            CoordsData::new(None, 4.0, 0.0), // start if step_size = 3
-            CoordsData::new(None, 5.0, 0.0),
-            CoordsData::new(None, 6.0, 0.0),
-            CoordsData::new(None, 7.0, 10.0),
-            CoordsData::new(None, 8.0, 10.0),
-            CoordsData::new(None, 9.0, 10.0), // end if step_size = 3
-            CoordsData::new(None, 10.0, 10.0), // end if step_size = 2
-            CoordsData::new(None, 11.0, 10.0),
-            CoordsData::new(None, 12.0, 10.0),
+        let x_values = vec![
+            1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
         ];
-        coords
+        let y_values = vec![
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0,
+        ];
+
+        x_values
+            .into_iter()
+            .zip(y_values.into_iter())
+            .map(|(x, y)| CoordsData::new(None, x, y))
+            .collect()
     }
 
     #[test]
@@ -651,45 +664,38 @@ mod tests {
         assert_eq!(rolls.len(), 6);
     }
 
+    /// Helper for test_eucdist_iter() avoids need to derive Clone for RollMeanData.
     fn get_some_means() -> Vec<RollMeanData> {
-        let means = vec![
-            RollMeanData {
-                x_bar: 3.0,
-                y_bar: 0.0,
-            },
-            RollMeanData {
-                x_bar: 4.0,
-                y_bar: 0.0,
-            },
-            RollMeanData {
-                x_bar: 5.0,
-                y_bar: 0.0,
-            },
-            RollMeanData {
-                x_bar: 6.0,
-                y_bar: 0.0,
-            },
-            RollMeanData {
-                x_bar: 7.0,
-                y_bar: 10.0,
-            },
-            RollMeanData {
-                x_bar: 8.0,
-                y_bar: 10.0,
-            },
-            RollMeanData {
-                x_bar: 9.0,
-                y_bar: 10.0,
-            },
-            RollMeanData {
-                x_bar: 10.0,
-                y_bar: 10.0,
-            },
-            RollMeanData {
-                x_bar: 11.0,
-                y_bar: 10.0,
-            },
-        ];
-        means
+        let x_values = vec![3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 8.0, 5.0, 17.0];
+        let y_values = vec![0.0, 0.0, 0.0, 0.0, 10.0, 10.0, 10.0, 10.0, 10.0];
+
+        x_values
+            .into_iter()
+            .zip(y_values.into_iter())
+            .map(|(x_bar, y_bar)| RollMeanData { x_bar, y_bar })
+            .collect()
+    }
+
+    #[test]
+    fn test_eucdist_iter() {
+        let mean_rolls: Vec<_> = get_some_means();
+        let vec_size = mean_rolls.len();
+        let curve_step_size = 2;
+        let euc_dists: Vec<_> = mean_rolls
+            .into_iter()
+            .euc_dist_iter(curve_step_size)
+            .collect();
+        // check curve_step_size number of items on both flanks are discarded
+        assert_eq!(euc_dists.len(), vec_size - 2 * (curve_step_size));
+        // √((7.0-3.0)² + (10.0-0.0)²) = √116 = 10.770329614269007
+        assert_relative_eq!(euc_dists[0], 10.7703, epsilon = 1e-4);
+        // √((8.0-4.0)² + (10.0-0.0)²) = √116 = 10.770329614269007
+        assert_relative_eq!(euc_dists[1], 10.7703, epsilon = 1e-4);
+        // √((8.0-5.0)² + (10.0-0.0)²) = √109 = 10.44031
+        assert_relative_eq!(euc_dists[2], 10.44031, epsilon = 1e-4);
+        // √((5.0-6.0)² + (10.0-0.0)²) = √101 = 10.04988
+        assert_relative_eq!(euc_dists[3], 10.04988, epsilon = 1e-4);
+        // √((17.0-7.0)² + (10.0-10.0)²) = √100 = 10.0
+        assert_relative_eq!(euc_dists[4], 10.0, epsilon = 1e-4);
     }
 }
