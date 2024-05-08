@@ -1,1 +1,18 @@
 // Put your custom SCSS code here
+
+// Makes the right edge of code blocks more flush with the text
+.expressive-code pre {
+    display: inline-block;
+}
+
+// padding and box-sizing setting to avoid horizontal scrollbars
+.expressive-code pre > code {
+    padding: 0.75rem;
+    box-sizing: border-box;
+    line-height: 1.2;
+}
+
+// rounded corners for code blocks
+.expressive-code .frame pre {
+    border-radius: 0.5rem;
+}
