@@ -20,7 +20,7 @@ pub const TILT: NucMatrix = [[[0.0; 4]; 4]; 4];
 
 /// The simple version fo the ROLL matrix is used to calculate the roll angle in three nucleotides
 /// of DNA.
-pub const ROLL_SIMPLE: NucMatrix = [
+pub const ROLL_ACTIVE: NucMatrix = [
     [
         [0.0633, 0.3500, 4.6709, 2.64115],
         [6.2734, 0.3500, 7.7171, 4.44325],
@@ -50,7 +50,7 @@ pub const ROLL_SIMPLE: NucMatrix = [
 /// The "activated" version of the ROLL matrix is used to calculate the roll angle in three
 /// nucleotides of DNA. This matrix differs from the simple matrix in that the angle
 /// values represent a more activated state of the nucleosomes bound to the DNA.
-pub const ROLL_ACTIVE: NucMatrix = [
+pub const ROLL_SIMPLE: NucMatrix = [
     [
         [0.1, 0.0, 4.2, 1.6],
         [9.7, 0.0, 8.7, 3.6],
@@ -121,9 +121,9 @@ pub(crate) fn matrix_lookup(triplet: &[u8], matrix: &NucMatrix) -> Result<f64, M
         .iter()
         .map(|&x| match x {
             b'A' => Some(0),
-            b'C' => Some(1),
+            b'T' => Some(1),
             b'G' => Some(2),
-            b'T' => Some(3),
+            b'C' => Some(3),
             _ => None,
         })
         .flatten()
@@ -145,11 +145,24 @@ mod tests {
 
     #[test]
     fn test_spot_check_indexing() {
-        assert_relative_eq!(TWIST[0][0][0], 0.598647428);
-        assert_relative_eq!(TWIST[1][1][1], 0.598647428);
-        assert_relative_eq!(ROLL_ACTIVE[1][2][0], 10.0);
-        assert_relative_eq!(matrix_lookup(b"AAA", &TWIST).unwrap(), 0.598647428);
-        assert_relative_eq!(matrix_lookup(b"CCC", &TWIST).unwrap(), 0.598647428);
+        assert_relative_eq!(TWIST[0][0][0], 0.598647428, epsilon = 1e-4);
+        assert_relative_eq!(TWIST[1][1][1], 0.598647428, epsilon = 1e-4);
+        assert_relative_eq!(ROLL_ACTIVE[1][2][0], 7.7, epsilon = 1e-4);
+        assert_relative_eq!(
+            matrix_lookup(b"AAA", &TWIST).unwrap(),
+            0.598647428,
+            epsilon = 1e-4
+        );
+        assert_relative_eq!(
+            matrix_lookup(b"CCC", &TWIST).unwrap(),
+            0.598647428,
+            epsilon = 1e-4
+        );
+        assert_relative_eq!(
+            matrix_lookup(b"CCA", &ROLL_SIMPLE).unwrap(),
+            0.7,
+            epsilon = 1e-4
+        );
         assert!(matrix_lookup(b"AA", &ROLL_ACTIVE).is_err());
         assert!(matrix_lookup(b"AAAA", &ROLL_ACTIVE).is_err());
         assert!(matrix_lookup(b"AAN", &ROLL_ACTIVE).is_err());
