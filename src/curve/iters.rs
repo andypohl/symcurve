@@ -503,6 +503,7 @@ impl<I: Iterator<Item = RollMeanData>> EucDistIterator for I {}
 /// * `inner`: The inner iterator that yields `u8`.
 pub struct CurveIter<I: Iterator<Item = u8>> {
     inner: EucDistIter<RollMeanIter<CoordsIter<TripletWindowsIter<I>>>>,
+    curve_scale: f64,
 }
 
 impl<I: Iterator<Item = u8>> Iterator for CurveIter<I> {
@@ -510,7 +511,7 @@ impl<I: Iterator<Item = u8>> Iterator for CurveIter<I> {
 
     /// Computes the next item of the curvature iterator.
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next()
+        self.inner.next().map(|x| x * self.curve_scale)
     }
 }
 
@@ -527,13 +528,20 @@ impl<I: Iterator<Item = u8>> Iterator for CurveIter<I> {
 ///  the size of the window.
 /// * `step_c`: The distance from the midpoint base to the sides in the curve window.
 impl<I: Iterator<Item = u8>> CurveIter<I> {
-    fn new(seq_iter: I, roll_type: matrix::RollType, step_b: usize, step_c: usize) -> Self {
+    fn new(
+        seq_iter: I,
+        roll_type: matrix::RollType,
+        step_b: usize,
+        step_c: usize,
+        curve_scale: f64,
+    ) -> Self {
         Self {
             inner: seq_iter
                 .triplet_windows_iter(roll_type)
                 .coords_iter()
                 .roll_mean_iter(step_b)
                 .euc_dist_iter(step_c),
+            curve_scale,
         }
     }
 }
@@ -543,7 +551,7 @@ mod tests {
     use super::*;
     use approx::assert_relative_eq;
 
-    /// Below is a table of some of the expected values for the coords iterator over the DNA
+    /// Below is a table of some of the expected values for the triplet iterator over the DNA
     ///
     /// | pos|nuc|trip | ixs |  twist |  roll_s |   tilt |twist_sum| dx_simp | dy_simp |
     /// | --:| -:| --: | --: | -----: | ------: | -----: | ------: | ------: | ------: |
@@ -686,21 +694,24 @@ mod tests {
     #[test]
     fn test_coords_iter() {
         let dna = b"CCAACATTTTGACTTTTTGGGAGGGCACTAGCACCTATCTACCCTGAATC";
-        let windows: Vec<CoordsData> = dna
+        let coords: Vec<CoordsData> = dna
             .iter()
             .cloned()
             .triplet_windows_iter(matrix::RollType::Simple)
             .coords_iter()
             .collect();
-        assert_eq!(windows.len(), dna.len() - 2);
-        assert_relative_eq!(windows[0].x, 0.3945, epsilon = 1e-4);
-        assert_relative_eq!(windows[0].y, 0.5783, epsilon = 1e-4);
-        assert_relative_eq!(windows[1].x, 6.1670, epsilon = 1e-4);
-        assert_relative_eq!(windows[1].y, 2.8405, epsilon = 1e-4);
-        assert_relative_eq!(windows[46].x, 23.4981, epsilon = 1e-4);
-        assert_relative_eq!(windows[46].y, 17.6671, epsilon = 1e-4);
-        assert_relative_eq!(windows[47].x, 21.8975, epsilon = 1e-4);
-        assert_relative_eq!(windows[47].y, 14.4425, epsilon = 1e-4);
+        let coords_len = coords.len();
+        assert_eq!(coords_len, dna.len() - 2);
+        // check first two
+        assert_relative_eq!(coords[0].x, 0.3945, epsilon = 1e-4);
+        assert_relative_eq!(coords[0].y, 0.5783, epsilon = 1e-4);
+        assert_relative_eq!(coords[1].x, 6.1670, epsilon = 1e-4);
+        assert_relative_eq!(coords[1].y, 2.8405, epsilon = 1e-4);
+        // check last two
+        assert_relative_eq!(coords[coords_len - 2].x, 23.4981, epsilon = 1e-4);
+        assert_relative_eq!(coords[coords_len - 2].y, 17.6671, epsilon = 1e-4);
+        assert_relative_eq!(coords[coords_len - 1].x, 21.8975, epsilon = 1e-4);
+        assert_relative_eq!(coords[coords_len - 1].y, 14.4425, epsilon = 1e-4);
     }
 
     /// Helper for test_rollmean_iter()
@@ -739,6 +750,83 @@ mod tests {
         assert_eq!(rolls.len(), 6);
     }
 
+    /// | pos|nuc|trip |  x_coord |  y_coord |    x_bar |    y_bar |
+    /// | --:| -:| --: | -------: | -------: | -------: | -------: |
+    /// |  0 | C | CCA |          |          |          |          |
+    /// |  1 | C | CAA |   0.3945 |   0.5783 |          |          |
+    /// |  2 | A | AAC |   6.1670 |   2.8405 |          |          |
+    /// |  3 | A | ACA |   7.7266 |   2.4833 |          |          |
+    /// |  4 | C | CAT |  11.6674 |  -1.7723 |          |          |
+    /// |  5 | A | ATT |  12.9534 | -10.3767 |          |          |
+    /// |  6 | T | TTT |  12.9534 | -10.3767 |   9.3566 |  -3.7097 |
+    /// |  7 | T | TTT |  12.8667 | -10.4266 |   9.7739 |  -2.9818 |
+    /// |  8 | T | TTG |  12.7670 | -10.4189 |  10.1124 |  -2.2720 |
+    /// |  9 | T | TGA |   7.9283 |  -6.5424 |  10.3897 |  -1.3191 |
+    /// | 10 | G | GAC |   5.0045 |   3.0206 |  10.4121 |   0.2698 |
+    /// | 11 | A | ACT |   6.6698 |   8.3673 |  10.3716 |   2.2795 |
+    /// | 12 | C | CTT |   8.2372 |   9.6096 |  10.1228 |   4.0604 |
+    /// | 13 | T | TTT |  12.4264 |   9.9099 |   9.6374 |   5.6094 |
+    /// | 14 | T | TTT |  12.5128 |   9.8596 |   9.0999 |   7.0619 |
+    /// | 15 | T | TTT |  12.5559 |   9.7693 |   8.5125 |   8.2048 |
+    /// | 16 | T | TTG |  12.5406 |   9.6705 |   7.8163 |   9.1892 |
+    /// | 17 | T | TGG |   8.3043 |   5.1435 |   7.0936 |  10.3676 |
+    /// | 18 | G | GGG |   7.6212 |   4.9908 |   6.4825 |  11.7650 |
+    /// | 19 | G | GGA |   2.3251 |   7.0983 |   6.3226 |  13.1588 |
+    /// | 20 | G | GAG |  -1.1419 |  12.2383 |   6.8088 |  14.1895 |
+    /// | 21 | A | AGG |  -1.1074 |  18.8382 |   7.5954 |  14.6167 |
+    /// | 22 | G | GGG |   1.5614 |  22.7069 |   8.5991 |  14.8489 |
+    /// | 23 | G | GGC |   6.8792 |  24.7590 |   9.4657 |  15.0326 |
+    /// | 24 | G | GCA |  14.8626 |  22.8866 |   9.9035 |  14.9578 |
+    /// | 25 | C | CAC |  19.9296 |  17.3571 |  10.1459 |  14.7509 |
+    /// | 26 | A | ACT |  20.8995 |  10.6266 |  10.2074 |  14.5144 |
+    /// | 27 | C | CTA |  20.0197 |   8.8305 |  10.1287 |  14.4377 |
+    /// | 28 | T | TAG |  13.2377 |   4.9777 |   9.9582 |  14.5496 |
+    /// | 29 | A | AGC |   5.4639 |   5.6167 |   9.5616 |  14.8284 |
+    /// | 30 | G | GCA |   0.5678 |   9.5814 |   9.0830 |  15.2950 |
+    /// | 31 | C | CAC |  -1.5875 |  16.7650 |   8.8452 |  15.7378 |
+    /// | 32 | A | ACC |   0.4685 |  23.2467 |   8.7809 |  15.9903 |
+    /// | 33 | C | CCT |   4.5605 |  26.4554 |   8.8479 |  16.1115 |
+    /// | 34 | C | CTA |   9.2502 |  26.7669 |   9.0384 |  16.0740 |
+    /// | 35 | T | TAT |  15.9709 |  22.8083 |   9.1846 |  15.8432 |
+    /// | 36 | A | ATC |  20.1012 |  14.0315 |   9.2424 |  15.3912 |
+    /// | 37 | T | TCT |  19.5319 |  10.4768 |   9.1639 |  14.7571 |
+    /// | 38 | C | CTA |  15.0659 |   5.7540 |   8.9154 |  14.1163 |
+    /// | 39 | T | TAC |   7.4450 |   4.0922 |   8.8110 |  13.6627 |
+    /// | 40 | A | ACC |   1.5109 |   6.4896 |   9.0710 |  13.4451 |
+    /// | 41 | C | CCC |  -1.3743 |  10.8157 |   9.4459 |  13.5588 |
+    /// | 42 | C | CCT |  -1.3148 |  16.5154 |   9.8141 |  14.1000 |
+    /// | 43 | C | CTG |   1.3742 |  20.3701 |  10.3540 |  14.8940 |
+    /// | 44 | T | TGA |  10.3485 |  23.7794 |          |          |
+    /// | 45 | G | GAA |  20.0722 |  21.4451 |          |          |
+    /// | 46 | A | AAT |  23.4981 |  17.6671 |          |          |
+    /// | 47 | A | ATC |  23.4981 |  17.6671 |          |          |
+    /// | 48 | T |     |  21.8975 |  14.4425 |          |          |
+    /// | 49 | C |     |          |          |          |          |
+    #[test]
+    fn test_rollmeans_from_seq() {
+        let dna = b"CCAACATTTTGACTTTTTGGGAGGGCACTAGCACCTATCTACCCTGAATC";
+        let step_size = 5;
+        let means: Vec<RollMeanData> = dna
+            .iter()
+            .cloned()
+            .triplet_windows_iter(matrix::RollType::Simple)
+            .coords_iter()
+            .roll_mean_iter(step_size)
+            .collect();
+        let means_len = means.len();
+        assert_eq!(means_len, dna.len() - 2 - 2 * step_size);
+        // check first two
+        assert_relative_eq!(means[0].x_bar, 9.3566, epsilon = 1e-4);
+        assert_relative_eq!(means[0].y_bar, -3.7097, epsilon = 1e-4);
+        assert_relative_eq!(means[1].x_bar, 9.7739, epsilon = 1e-4);
+        assert_relative_eq!(means[1].y_bar, -2.9818, epsilon = 1e-4);
+        // check last two
+        assert_relative_eq!(means[means_len - 2].x_bar, 9.8141, epsilon = 1e-4);
+        assert_relative_eq!(means[means_len - 2].y_bar, 14.1000, epsilon = 1e-4);
+        assert_relative_eq!(means[means_len - 1].x_bar, 10.3540, epsilon = 1e-4);
+        assert_relative_eq!(means[means_len - 1].y_bar, 14.8940, epsilon = 1e-4);
+    }
+
     /// Helper for test_eucdist_iter()
     fn get_some_means() -> Vec<RollMeanData> {
         let x_values = vec![3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 8.0, 5.0, 17.0];
@@ -773,13 +861,107 @@ mod tests {
         // √((17.0-7.0)² + (10.0-10.0)²) = √100 = 10.0
         assert_relative_eq!(euc_dists[4], 10.0, epsilon = 1e-4);
     }
+    /// | pos|nuc|trip |    x_bar |    y_bar |   curve |
+    /// | --:| -:| --: | -------: | -------: | ------: |
+    /// |  0 | C | CCA |          |          |         |
+    /// |  1 | C | CAA |          |          |         |
+    /// |  2 | A | AAC |          |          |         |
+    /// |  3 | A | ACA |          |          |         |
+    /// |  4 | C | CAT |          |          |         |
+    /// |  5 | A | ATT |          |          |         |
+    /// |  6 | T | TTT |   9.3566 |  -3.7097 |         |
+    /// |  7 | T | TTT |   9.7739 |  -2.9818 |         |
+    /// |  8 | T | TTG |  10.1124 |  -2.2720 |         |
+    /// |  9 | T | TGA |  10.3897 |  -1.3191 |         |
+    /// | 10 | G | GAC |  10.4121 |   0.2698 |         |
+    /// | 11 | A | ACT |  10.3716 |   2.2795 |         |
+    /// | 12 | C | CTT |  10.1228 |   4.0604 |         |
+    /// | 13 | T | TTT |   9.6374 |   5.6094 |         |
+    /// | 14 | T | TTT |   9.0999 |   7.0619 |         |
+    /// | 15 | T | TTT |   8.5125 |   8.2048 |         |
+    /// | 16 | T | TTG |   7.8163 |   9.1892 |         |
+    /// | 17 | T | TGG |   7.0936 |  10.3676 |         |
+    /// | 18 | G | GGG |   6.4825 |  11.7650 |         |
+    /// | 19 | G | GGA |   6.3226 |  13.1588 |         |
+    /// | 20 | G | GAG |   6.8088 |  14.1895 |         |
+    /// | 21 | A | AGG |   7.5954 |  14.6167 | 19.1012 |
+    /// | 22 | G | GGG |   8.5991 |  14.8489 | 17.7494 |
+    /// | 23 | G | GGC |   9.4657 |  15.0326 | 16.4319 |
+    /// | 24 | G | GCA |   9.9035 |  14.9578 | 15.0647 |
+    /// | 25 | C | CAC |  10.1459 |  14.7509 | 13.2434 |
+    /// | 26 | A | ACT |  10.2074 |  14.5144 | 11.3172 |
+    /// | 27 | C | CTA |  10.1287 |  14.4377 | 10.0444 |
+    /// | 28 | T | TAG |   9.9582 |  14.5496 |  9.3122 |
+    /// | 29 | A | AGC |   9.5616 |  14.8284 |         |
+    /// | 30 | G | GCA |   9.0830 |  15.2950 |         |
+    /// | 31 | C | CAC |   8.8452 |  15.7378 |         |
+    /// | 32 | A | ACC |   8.7809 |  15.9903 |         |
+    /// | 33 | C | CCT |   8.8479 |  16.1115 |         |
+    /// | 34 | C | CTA |   9.0384 |  16.0740 |         |
+    /// | 35 | T | TAT |   9.1846 |  15.8432 |         |
+    /// | 36 | A | ATC |   9.2424 |  15.3912 |         |
+    /// | 37 | T | TCT |   9.1639 |  14.7571 |         |
+    /// | 38 | C | CTA |   8.9154 |  14.1163 |         |
+    /// | 39 | T | TAC |   8.8110 |  13.6627 |         |
+    /// | 40 | A | ACC |   9.0710 |  13.4451 |         |
+    /// | 41 | C | CCC |   9.4459 |  13.5588 |         |
+    /// | 42 | C | CCT |   9.8141 |  14.1000 |         |
+    /// | 43 | C | CTG |  10.3540 |  14.8940 |         |
+    /// | 44 | T | TGA |          |          |         |
+    /// | 45 | G | GAA |          |          |         |
+    /// | 46 | A | AAT |          |          |         |
+    /// | 47 | A | ATC |          |          |         |
+    /// | 48 | T |     |          |          |         |
+    /// | 49 | C |     |          |          |         |
+    #[test]
+    fn test_eucdist_iter_from_seq() {
+        let dna = b"CCAACATTTTGACTTTTTGGGAGGGCACTAGCACCTATCTACCCTGAATC";
+        let step_size = 5;
+        let curve_step = 15;
+        let curves: Vec<_> = dna
+            .iter()
+            .cloned()
+            .triplet_windows_iter(matrix::RollType::Simple)
+            .coords_iter()
+            .roll_mean_iter(step_size)
+            .euc_dist_iter(curve_step)
+            .collect();
+        let curves_len = curves.len();
+        assert_eq!(
+            curves_len,
+            dna.len() - 2 - (2 * step_size) - (2 * curve_step)
+        );
+        // check all
+        assert_relative_eq!(curves[0], 19.1012, epsilon = 1e-4);
+        assert_relative_eq!(curves[1], 17.7494, epsilon = 1e-4);
+        assert_relative_eq!(curves[2], 16.4319, epsilon = 1e-4);
+        assert_relative_eq!(curves[3], 15.0647, epsilon = 1e-4);
+        assert_relative_eq!(curves[4], 13.2434, epsilon = 1e-4);
+        assert_relative_eq!(curves[5], 11.3172, epsilon = 1e-4);
+        assert_relative_eq!(curves[6], 10.0444, epsilon = 1e-4);
+        assert_relative_eq!(curves[7], 9.3122, epsilon = 1e-4);
+    }
 
     #[test]
     fn test_curve_iter() {
         let seq = b"CCAACATTTTGACTTTTTGGGAGGGCACTAGCACCTATCTACCCTGAATC";
         let seq_len = seq.len();
-        let curves: Vec<_> =
-            CurveIter::new(seq.iter().cloned(), matrix::RollType::Simple, 5, 15).collect();
+        let curves: Vec<_> = CurveIter::new(
+            seq.iter().cloned(),
+            matrix::RollType::Simple,
+            5,
+            15,
+            0.33335,
+        )
+        .collect();
         assert_eq!(curves.len(), seq_len - (21 * 2));
+        assert_relative_eq!(curves[0], 6.3674, epsilon = 1e-4);
+        assert_relative_eq!(curves[1], 5.9168, epsilon = 1e-4);
+        assert_relative_eq!(curves[2], 5.4776, epsilon = 1e-4);
+        assert_relative_eq!(curves[3], 5.0218, epsilon = 1e-4);
+        assert_relative_eq!(curves[4], 4.4147, epsilon = 1e-4);
+        assert_relative_eq!(curves[5], 3.7726, epsilon = 1e-4);
+        assert_relative_eq!(curves[6], 3.3483, epsilon = 1e-4);
+        assert_relative_eq!(curves[7], 3.1042, epsilon = 1e-4);
     }
 }
