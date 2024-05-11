@@ -48,6 +48,10 @@ jobs:
         uses: actions/configure-pages@v5
       - name: Install Node.js dependencies
         run: "[[ -f docs/package-lock.json || -f docs/npm-shrinkwrap.json ]] && cd docs && npm ci || true"
+      - name: Generate Rust documentation
+        run: |
+          cargo doc --no-deps
+          mv target/doc docs/public/rust
       - name: Build with Hugo
         env:
           # For maximum backward compatibility with Hugo modules
@@ -74,4 +78,3 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-

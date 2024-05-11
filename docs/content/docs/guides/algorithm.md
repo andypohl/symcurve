@@ -27,7 +27,7 @@ The diagram below shows the six main ways that two consecutive base pairs are di
 
 Of these six, the three parameters SymCurve uses are \(\Omega\), \(\rho\), and \(\tau\). Also, SymCurve uses estimates of the 3-mer version of these parameters instead of the 2-mer representations in the diagram. These parameters \(\Omega\), \(\rho\), and \(\tau\) in this case take the form of 4x4x4 matrices, with one dimension per nucleotide in the 3-mer.
 
-For the roll parameter \(\rho\), SymCurve uses one of two matrices: \(\rho^\psi\) representing roll in a "simple" or "inactive" state, or \(\rho^\alpha\) representing roll in an "active" state, where polymerases may be actively transcribing the DNA.
+For the roll parameter \(\rho\), SymCurve uses one of two matrices: \(\rho^\alpha\) representing roll in an "active" state, where polymerases may be actively transcribing the DNA, or \(\rho^\beta\) representing roll in a "simple" or "inactive" state.
 
 ### 3-mer windowing
 In our equations later, we'll refer to the input nucleotide sequence as \(S\), with length \(n\).  Individual nucleotides \(s_i\) form \(S\) as in the notation below:
@@ -65,24 +65,24 @@ where \(x_1 = y_1 = 0\). Note: the range of valid coordinates \(i\) extends to \
 \(x_1\) and \(y_1\) are ignored in subsequent steps.
 
 ### Rolling coordinate averages
-We'll now define a parameter \(b\), where \(2b+1\) is a sliding window size over the range of coordinates \(b+1 \lt i \lt n-b-1\). Usually we set \(b=5\) which means a sliding window of 11 bases ecompasses the rolling average. The rolling averages \(\overline{x}\) and \(\overline{y}\) are also slightly weighted centrally,
+We'll now define a parameter \(a\), where \(2a+1\) is a sliding window size over the range of coordinates \(a+1 \lt i \lt n-a-1\). Usually we set \(a=5\) which means a sliding window of 11 bases ecompasses the rolling average. The rolling averages \(\overline{x}\) and \(\overline{y}\) are also slightly weighted centrally,
 with the values at either end of the window only contributing half what the central values contribute.
 
 \[
 \begin{aligned}
-\overline{x}_i &= \left(\frac{x_{i-b-1}+x_{i+b+1}}{2} + \sum_{j=i-b}^{i+b}x_j\right)\left(\frac{1}{2b+2}\right) \\
-\overline{y}_i &= \left(\frac{y_{i-b-1}+y_{i+b+1}}{2} + \sum_{j=i-b}^{i+b}y_j\right)\left(\frac{1}{2b+2}\right) \\
+\overline{x}_i &= \left(\frac{x_{i-a-1}+x_{i+a+1}}{2} + \sum_{j=i-a}^{i+a}x_j\right)\left(\frac{1}{2a+2}\right) \\
+\overline{y}_i &= \left(\frac{y_{i-a-1}+y_{i+a+1}}{2} + \sum_{j=i-a}^{i+a}y_j\right)\left(\frac{1}{2a+2}\right) \\
 \end{aligned}
 \]
 
 ### Curvature
 Using the rolling averages, the curvature values \(\kappa_i\) are now possible to calculate over a range of
-\(b+c+1 < i < n-b-c-1\) where \(c\), is another half-span, usually set to 15. \(\kappa_i\) is computed as the
-Euclidean distance between the points \((\overline{x}_{i+c}, \overline{y}_{i+c})\) and \((\overline{x}_{i-c}, \overline{y}_{i-c})\).
+\(a+b+1 < i < n-a-b-1\) where \(b\), is another half-span, usually set to 15. \(\kappa_i\) is computed as the
+Euclidean distance between the points \((\overline{x}_{i+b}, \overline{y}_{i+b})\) and \((\overline{x}_{i-b}, \overline{y}_{i-b})\).
 Additionally, a scaling coefficient \(\lambda\) is applied and by default set to \(0.33335\).
 
 \[
-\kappa_i = \lambda\sqrt{(\overline{x}_{i+c}-\overline{x}_{i-c})^2 + (\overline{y}_{i+c}-\overline{y}_{i-c})^2}
+\kappa_i = \lambda\sqrt{(\overline{x}_{i+b}-\overline{x}_{i-b})^2 + (\overline{y}_{i+b}-\overline{y}_{i-b})^2}
 \]
 
 ### Symmetry
