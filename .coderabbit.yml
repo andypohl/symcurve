@@ -22,5 +22,5 @@ path_filters:
   - "docs/content/**/*.md"
 
 path_instructions:
-  - "docs/content/**/*.md":
-      - "Please look for likely typos and grammatical errors."
+  "docs/content/**/*.md":
+    - "Please look for likely typos and grammatical errors."
