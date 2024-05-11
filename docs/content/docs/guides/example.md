@@ -40,9 +40,9 @@ This sequence will be \(S\) with \(n=500\).  Now let's consider \(W\), with \(w_
 ### Parameters
 
 For this example, we'll use a typical set of parameters:
-* \(\delta^\mu = 5\)
-* \(\delta^\kappa = 15\)
-* \(\delta^\psi = 51\)
+* \(a = 5\)
+* \(b = 15\)
+* \(c = 51\)
 * \(\lambda = 0.33335\)
 * [\(\rho = \rho^\beta\)](/symcurve/docs/reference/matrices/#roll)
 
