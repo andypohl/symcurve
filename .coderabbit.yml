@@ -14,16 +14,17 @@ reviews:
       - "WIP"
       - "DO NOT MERGE"
     drafts: false
-chat:
-  auto_reply: true
-reviews:
   path_filters:
     exclude:
       - "perl/**"
       - "docs/**"
     include:
       - "docs/content/**/*.md"
-      - "src/**/*.rs"
+      - "**/README.md"
   path_instructions:
     "docs/content/**/*.md":
       - "Please look for likely typos and grammatical errors."
+    "**/README.md":
+      - "Please ensure that the README is up-to-date and accurate and look for likely typos and grammatical errors."
+chat:
+  auto_reply: true
