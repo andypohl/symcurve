@@ -18,9 +18,12 @@ chat:
   auto_reply: true
 reviews:
   path_filters:
-    - "!perl/**"
-    - "!docs/**"
-    - "docs/content/**/*.md"
+    exclude:
+      - "perl/**"
+      - "docs/**"
+    include:
+      - "docs/content/**/*.md"
+      - "src/**/*.rs"
   path_instructions:
     "docs/content/**/*.md":
       - "Please look for likely typos and grammatical errors."
