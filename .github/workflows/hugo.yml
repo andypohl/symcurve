@@ -70,8 +70,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: rust-docs
-      - name: Move rustdocs to public
-        run: mv target/doc docs/public/rust
+          path: docs/public/rust
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
