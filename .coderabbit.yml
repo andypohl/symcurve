@@ -19,6 +19,8 @@ reviews:
     - "!docs/**"
     - "docs/content/**/*.md"
     - "**/README.md"
+    - "src/**/*.rs"
+    - ".github/workflows/**"
   path_instructions:
     - path: "docs/content/**/*.md"
       instructions: "Please look for likely typos and grammatical errors."
