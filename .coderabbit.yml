@@ -15,12 +15,10 @@ reviews:
       - "DO NOT MERGE"
     drafts: false
   path_filters:
-    exclude:
-      - "perl/**"
-      - "docs/**"
-    include:
-      - "docs/content/**/*.md"
-      - "**/README.md"
+    - "!perl/**"
+    - "!docs/**"
+    - "docs/content/**/*.md"
+    - "**/README.md"
   path_instructions:
     - path: "docs/content/**/*.md"
       instructions: "Please look for likely typos and grammatical errors."
