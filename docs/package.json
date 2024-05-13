@@ -33,8 +33,7 @@
     "exec-bin": "^1.0.0",
     "gethyas": "^2.2.2",
     "hugo-installer": "^4.0.1",
-    "npx": "^10.2.2",
-    "postcss-cli": "^11.0.0"
+    "npx": "^10.2.2"
   },
   "devDependencies": {
     "shx": "^0.3.4"
