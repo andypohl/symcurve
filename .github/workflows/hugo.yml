@@ -65,7 +65,9 @@ jobs:
         with:
           hugo-version: "latest"
       - name: Build
-        run: hugo --source docs --minify --baseURL "${{ steps.pages.outputs.base_url }}/"
+        run: |
+          cd docs
+          hugo --minify --baseURL "${{ steps.pages.outputs.base_url }}/"
       - name: Download rustdocs artifact
         uses: actions/download-artifact@v4
         with:
