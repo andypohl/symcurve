@@ -22,9 +22,9 @@ reviews:
       - "docs/content/**/*.md"
       - "**/README.md"
   path_instructions:
-    "docs/content/**/*.md":
-      - "Please look for likely typos and grammatical errors."
-    "**/README.md":
-      - "Please ensure that the README is up-to-date and accurate and look for likely typos and grammatical errors."
+    - path: "docs/content/**/*.md"
+      instructions: "Please look for likely typos and grammatical errors."
+    - path: "**/README.md"
+      instructions: "Please ensure that the README is up-to-date and accurate and look for likely typos and grammatical errors."
 chat:
   auto_reply: true
