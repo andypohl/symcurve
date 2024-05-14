@@ -1,10 +1,12 @@
-name: Rust
+name: Rust Build
 
 on:
   push:
-    branches: ["main"]
+    branches-ignore:
+      - "main"
   pull_request:
-    branches: ["main"]
+    branches:
+      - "main"
 
 env:
   CARGO_TERM_COLOR: always
@@ -13,6 +15,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - name: Print Cargo.lock hash
+        run: "echo 'Cargo.lock hash: ' ${{ hashFiles('**/Cargo.lock') }}"
       - uses: actions/cache@v4
         with:
           path: |
@@ -22,7 +27,6 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - uses: actions/checkout@v4
       - name: Build
         run: cargo build --verbose
       - name: Run tests
