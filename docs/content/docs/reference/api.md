@@ -19,4 +19,4 @@ seo:
 ---
 ## Rust
 [Rustdoc](https://doc.rust-lang.org/rustdoc/index.html) autodocumentation is generated with `cargo doc --no-deps`.
-- [main branch](/symcurve/rust/symcurve/index.html)
+- [main branch](/rust/symcurve/index.html)

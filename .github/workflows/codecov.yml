@@ -1,6 +1,22 @@
 name: coverage
 
-on: [push]
+# almost same triggers as the rust.yml
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "tests/**/*.rs"
+      - "src/**/*.rs"
+      - "Cargo.toml"
+      - "Cargo.lock"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "tests/**/*.rs"
+      - "src/**/*.rs"
+      - "Cargo.toml"
+      - "Cargo.lock"
+
 jobs:
   test:
     name: coverage
