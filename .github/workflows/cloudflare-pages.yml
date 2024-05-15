@@ -64,6 +64,9 @@ jobs:
   deploy:
     name: Deploy to Cloudflare
     runs-on: ubuntu-latest
+    environment:
+      name: cloudflare-pages
+      url: ${{ steps.deployment.outputs.alias }}
     needs:
       - rust-docs-build
       - hugo-docs-build
