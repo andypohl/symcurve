@@ -24,8 +24,7 @@ jobs:
           name: rust-docs
           path: target/doc
 
-  docs-build:
-    needs: rust-docs-build
+  hugo-docs-build:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -59,7 +58,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - rust-docs-build
-      - docs-build
+      - hugo-docs-build
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
