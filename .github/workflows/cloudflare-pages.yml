@@ -23,7 +23,8 @@ jobs:
           name: rust-docs
           path: target/doc
 
-  publish:
+  docs-build:
+    needs: rust-docs-build
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -51,7 +52,13 @@ jobs:
         with:
           name: rust-docs
           path: docs/public/rust
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: docs-build
+    steps:
       - name: Publish to Cloudflare Pages
+        id: deployment
         uses: cloudflare/pages-action@v1
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
