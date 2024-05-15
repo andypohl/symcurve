@@ -1,5 +1,13 @@
 name: Deploy to Cloudflare Pages
-on: [push]
+on:
+  push:
+    paths:
+      - "tests/**/*.rs"
+      - "src/**/*.rs"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "docs/**"
+      - ".github/workflows/cloudflare-pages.yml"
 
 jobs:
   rust-docs-build:
