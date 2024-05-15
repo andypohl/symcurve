@@ -3,6 +3,7 @@ on: [push]
 
 jobs:
   rust-docs-build:
+    name: Build Rustdoc Pages
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -76,10 +77,6 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           projectName: symcurve
           directory: public
-          # Optional: Switch what branch you are publishing to.
-          # Set the branch for production, all other branches will be preview deployments
-          branch: main
-          # Optional: Change the working directory
+          branch: ci-updates
           workingDirectory: docs
-          # Optional: Change the Wrangler version, allows you to point to a specific version or a tag such as `beta`
           wranglerVersion: "3"
