@@ -1,13 +1,22 @@
-name: Rust Build
+name: Rust Build/Test
 
 on:
   push:
     branches-ignore:
       - "main"
+    paths:
+      - "tests/**/*.rs"
+      - "src/**/*.rs"
+      - "Cargo.toml"
+      - "Cargo.lock"
   pull_request:
     branches:
       - "main"
-
+    paths:
+      - "tests/**/*.rs"
+      - "src/**/*.rs"
+      - "Cargo.toml"
+      - "Cargo.lock"
 env:
   CARGO_TERM_COLOR: always
 
