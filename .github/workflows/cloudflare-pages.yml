@@ -77,6 +77,5 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           projectName: symcurve
           directory: public
-          branch: ci-updates
           workingDirectory: docs
           wranglerVersion: "3"
