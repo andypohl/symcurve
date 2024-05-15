@@ -44,6 +44,6 @@ For this example, we'll use a typical set of parameters:
 * \(b = 15\)
 * \(c = 51\)
 * \(\lambda = 0.33335\)
-* [\(\rho = \rho^\beta\)](/symcurve/docs/reference/matrices/#roll)
+* [\(\rho = \rho^\beta\)](/docs/reference/matrices/#roll)
 
 (*To be continued...*)

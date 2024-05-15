@@ -22,7 +22,7 @@ seo:
 The diagram below shows the six main ways that two consecutive base pairs are distanced from each other.
 
 <div id="dna-img-buffer" style="padding-bottom: 20px">
-<img src="/symcurve/images/dna-curve-light.png" class="themed" alt="Alt text for the image" title="Title of the image" width="60%" height="60%" />
+<img src="/images/dna-curve-light.png" class="themed" alt="Alt text for the image" title="Title of the image" width="60%" height="60%" />
 </div>
 
 Of these six, the three parameters SymCurve uses are \(\Omega\), \(\rho\), and \(\tau\). Also, SymCurve uses estimates of the 3-mer version of these parameters instead of the 2-mer representations in the diagram. These parameters \(\Omega\), \(\rho\), and \(\tau\) in this case take the form of 4x4x4 matrices, with one dimension per nucleotide in the 3-mer.

@@ -1,5 +1,4 @@
 title = "symcurve"
-baseurl = "https://andypohl.github.io/symcurve/"
 canonifyURLs = false
 disableAliases = true
 disableHugoGeneratorInject = true
