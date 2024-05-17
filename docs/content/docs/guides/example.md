@@ -17,7 +17,9 @@ seo:
   canonical: "" # custom canonical URL (optional)
   noindex: false # false (default) or true
 ---
-
+<link rel="stylesheet" href="https://cdn.datatables.net/2.0.7/css/dataTables.dataTables.css" />
+  
+<script src="https://cdn.datatables.net/2.0.7/js/dataTables.js"></script>
 ### Sequence
 
 Consider the 500 nucleotides of sequences below.  It's enough to wrap at least two eukaryotic nucleosomes.
@@ -46,4 +48,566 @@ For this example, we'll use a typical set of parameters:
 * \(\lambda = 0.33335\)
 * [\(\rho = \rho^\beta\)](/docs/reference/matrices/#roll)
 
-(*To be continued...*)
+### 3-mer step values and coordinates
+Below is a table of the sequence values, 3-mers, matrix values, and finally the calculated coordinates. Note that because multiple bases may be used in some of the calculations, some of the values at the edges are missing.
+<style>
+        /* If the table has an id */
+        #coordtable {
+            font-size: x-small;
+            font-family: var(--ec-codeFontFml);
+        }
+        .dt-paging .dt-paging-button {
+            font-size: x-small;
+            padding: 0.5em inherit;
+        }
+        .dt-input {
+            font-size: x-small;
+        }
+        .dt-length {
+            font-size: smaller;
+        }
+</style>
+<table id="coordtable" class="compact stripe dt-body-right">
+    <thead>
+        <tr>
+            <th>\(i\)</th>
+            <th>\(s_i\)</th>
+            <th>\(w_i\)</th>
+            <th>\(\Omega_i\)</th>
+            <th>\(\rho^\psi_i\)</th>
+            <th>\(\tau_i\)</th>
+            <th>\(T_i\)</th>
+            <th>\(dx_i\)</th>
+            <th>\(dy_i\)</th>
+            <th>\(x_i\)</th>
+            <th>\(y_i\)</th>
+        </tr>
+    </thead>
+    <tbody>
+<tr><td>1</td><td>C</td><td>CCA</td><td>0.5986</td><td>0.7</td><td>0.0</td><td>0.5986</td><td>0.3945</td><td>0.5783</td><td>---</td><td>---</td></tr>
+<tr><td>2</td><td>C</td><td>CAA</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>1.1973</td><td>5.7725</td><td>2.2622</td><td>0.3945</td><td>0.5783</td></tr>
+<tr><td>3</td><td>A</td><td>AAC</td><td>0.5986</td><td>1.6</td><td>0.0</td><td>1.7959</td><td>1.5596</td><td>-0.3572</td><td>6.1670</td><td>2.8405</td></tr>
+<tr><td>4</td><td>A</td><td>ACA</td><td>0.5986</td><td>5.8</td><td>0.0</td><td>2.3946</td><td>3.9408</td><td>-4.2556</td><td>7.7266</td><td>2.4833</td></tr>
+<tr><td>5</td><td>C</td><td>CAT</td><td>0.5986</td><td>8.7</td><td>0.0</td><td>2.9932</td><td>1.2860</td><td>-8.6044</td><td>11.6674</td><td>-1.7723</td></tr>
+<tr><td>6</td><td>A</td><td>ATT</td><td>0.5986</td><td>0.0</td><td>0.0</td><td>3.5919</td><td>0.0000</td><td>0.0000</td><td>12.9534</td><td>-10.3767</td></tr>
+<tr><td>7</td><td>T</td><td>TTT</td><td>0.5986</td><td>0.1</td><td>0.0</td><td>4.1905</td><td>-0.0867</td><td>-0.0498</td><td>12.9534</td><td>-10.3767</td></tr>
+<tr><td>8</td><td>T</td><td>TTT</td><td>0.5986</td><td>0.1</td><td>0.0</td><td>4.7892</td><td>-0.0997</td><td>0.0077</td><td>12.8667</td><td>-10.4266</td></tr>
+<tr><td>9</td><td>T</td><td>TTG</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>5.3878</td><td>-4.8387</td><td>3.8765</td><td>12.7670</td><td>-10.4189</td></tr>
+<tr><td>10</td><td>T</td><td>TGA</td><td>0.5986</td><td>10.0</td><td>0.0</td><td>5.9865</td><td>-2.9238</td><td>9.5630</td><td>7.9283</td><td>-6.5424</td></tr>
+<tr><td>11</td><td>G</td><td>GAC</td><td>0.5986</td><td>5.6</td><td>0.0</td><td>6.5851</td><td>1.6653</td><td>5.3467</td><td>5.0045</td><td>3.0206</td></tr>
+<tr><td>12</td><td>A</td><td>ACT</td><td>0.5986</td><td>2.0</td><td>0.0</td><td>7.1838</td><td>1.5674</td><td>1.2423</td><td>6.6698</td><td>8.3673</td></tr>
+<tr><td>13</td><td>C</td><td>CTT</td><td>0.5986</td><td>4.2</td><td>0.0</td><td>7.7824</td><td>4.1892</td><td>0.3003</td><td>8.2372</td><td>9.6096</td></tr>
+<tr><td>14</td><td>T</td><td>TTT</td><td>0.5986</td><td>0.1</td><td>0.0</td><td>8.3811</td><td>0.0864</td><td>-0.0503</td><td>12.4264</td><td>9.9099</td></tr>
+<tr><td>15</td><td>T</td><td>TTT</td><td>0.5986</td><td>0.1</td><td>0.0</td><td>8.9797</td><td>0.0431</td><td>-0.0903</td><td>12.5128</td><td>9.8596</td></tr>
+<tr><td>16</td><td>T</td><td>TTT</td><td>0.5986</td><td>0.1</td><td>0.0</td><td>9.5784</td><td>-0.0153</td><td>-0.0988</td><td>12.5559</td><td>9.7693</td></tr>
+<tr><td>17</td><td>T</td><td>TTG</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>10.1770</td><td>-4.2363</td><td>-4.5270</td><td>12.5406</td><td>9.6705</td></tr>
+<tr><td>18</td><td>T</td><td>TGG</td><td>0.5986</td><td>0.7</td><td>0.0</td><td>10.7757</td><td>-0.6831</td><td>-0.1527</td><td>8.3043</td><td>5.1435</td></tr>
+<tr><td>19</td><td>G</td><td>GGG</td><td>0.5986</td><td>5.7</td><td>0.0</td><td>11.3743</td><td>-5.2961</td><td>2.1075</td><td>7.6212</td><td>4.9908</td></tr>
+<tr><td>20</td><td>G</td><td>GGA</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>11.9729</td><td>-3.4670</td><td>5.1400</td><td>2.3251</td><td>7.0983</td></tr>
+<tr><td>21</td><td>G</td><td>GAG</td><td>0.5986</td><td>6.6</td><td>0.0</td><td>12.5716</td><td>0.0345</td><td>6.5999</td><td>-1.1419</td><td>12.2383</td></tr>
+<tr><td>22</td><td>A</td><td>AGG</td><td>0.5986</td><td>4.7</td><td>0.0</td><td>13.1702</td><td>2.6688</td><td>3.8688</td><td>-1.1074</td><td>18.8382</td></tr>
+<tr><td>23</td><td>G</td><td>GGG</td><td>0.5986</td><td>5.7</td><td>0.0</td><td>13.7689</td><td>5.3178</td><td>2.0520</td><td>1.5614</td><td>22.7069</td></tr>
+<tr><td>24</td><td>G</td><td>GGC</td><td>0.5986</td><td>8.2</td><td>0.0</td><td>14.3675</td><td>7.9834</td><td>-1.8724</td><td>6.8792</td><td>24.7590</td></tr>
+<tr><td>25</td><td>G</td><td>GCA</td><td>0.5986</td><td>7.5</td><td>0.0</td><td>14.9662</td><td>5.0670</td><td>-5.5295</td><td>14.8626</td><td>22.8866</td></tr>
+<tr><td>26</td><td>C</td><td>CAC</td><td>0.5986</td><td>6.8</td><td>0.0</td><td>15.5648</td><td>0.9700</td><td>-6.7305</td><td>19.9296</td><td>17.3571</td></tr>
+<tr><td>27</td><td>A</td><td>ACT</td><td>0.5986</td><td>2.0</td><td>0.0</td><td>16.1635</td><td>-0.8799</td><td>-1.7961</td><td>20.8995</td><td>10.6266</td></tr>
+<tr><td>28</td><td>C</td><td>CTA</td><td>0.5986</td><td>7.8</td><td>0.0</td><td>16.7621</td><td>-6.7820</td><td>-3.8528</td><td>20.0197</td><td>8.8305</td></tr>
+<tr><td>29</td><td>T</td><td>TAG</td><td>0.5986</td><td>7.8</td><td>0.0</td><td>17.3608</td><td>-7.7738</td><td>0.6390</td><td>13.2377</td><td>4.9777</td></tr>
+<tr><td>30</td><td>A</td><td>AGC</td><td>0.5986</td><td>6.3</td><td>0.0</td><td>17.9594</td><td>-4.8961</td><td>3.9646</td><td>5.4639</td><td>5.6167</td></tr>
+<tr><td>31</td><td>G</td><td>GCA</td><td>0.5986</td><td>7.5</td><td>0.0</td><td>18.5581</td><td>-2.1553</td><td>7.1836</td><td>0.5678</td><td>9.5814</td></tr>
+<tr><td>32</td><td>C</td><td>CAC</td><td>0.5986</td><td>6.8</td><td>0.0</td><td>19.1567</td><td>2.0560</td><td>6.4817</td><td>-1.5875</td><td>16.7650</td></tr>
+<tr><td>33</td><td>A</td><td>ACC</td><td>0.5986</td><td>5.2</td><td>0.0</td><td>19.7554</td><td>4.0920</td><td>3.2087</td><td>0.4685</td><td>23.2467</td></tr>
+<tr><td>34</td><td>C</td><td>CCT</td><td>0.5986</td><td>4.7</td><td>0.0</td><td>20.3540</td><td>4.6897</td><td>0.3116</td><td>4.5605</td><td>26.4554</td></tr>
+<tr><td>35</td><td>C</td><td>CTA</td><td>0.5986</td><td>7.8</td><td>0.0</td><td>20.9527</td><td>6.7208</td><td>-3.9587</td><td>9.2502</td><td>26.7669</td></tr>
+<tr><td>36</td><td>T</td><td>TAT</td><td>0.5986</td><td>9.7</td><td>0.0</td><td>21.5513</td><td>4.1302</td><td>-8.7767</td><td>15.9709</td><td>22.8083</td></tr>
+<tr><td>37</td><td>A</td><td>ATC</td><td>0.5986</td><td>3.6</td><td>0.0</td><td>22.1500</td><td>-0.5693</td><td>-3.5547</td><td>20.1012</td><td>14.0315</td></tr>
+<tr><td>38</td><td>T</td><td>TCT</td><td>0.5986</td><td>6.5</td><td>0.0</td><td>22.7486</td><td>-4.4660</td><td>-4.7228</td><td>19.5319</td><td>10.4768</td></tr>
+<tr><td>39</td><td>C</td><td>CTA</td><td>0.5986</td><td>7.8</td><td>0.0</td><td>23.3472</td><td>-7.6209</td><td>-1.6618</td><td>15.0659</td><td>5.7540</td></tr>
+<tr><td>40</td><td>T</td><td>TAC</td><td>0.5986</td><td>6.4</td><td>0.0</td><td>23.9459</td><td>-5.9340</td><td>2.3974</td><td>7.4450</td><td>4.0922</td></tr>
+<tr><td>41</td><td>A</td><td>ACC</td><td>0.5986</td><td>5.2</td><td>0.0</td><td>24.5445</td><td>-2.8853</td><td>4.3261</td><td>1.5109</td><td>6.4896</td></tr>
+<tr><td>42</td><td>C</td><td>CCC</td><td>0.5986</td><td>5.7</td><td>0.0</td><td>25.1432</td><td>0.0596</td><td>5.6997</td><td>-1.3743</td><td>10.8157</td></tr>
+<tr><td>43</td><td>C</td><td>CCT</td><td>0.5986</td><td>4.7</td><td>0.0</td><td>25.7418</td><td>2.6890</td><td>3.8548</td><td>-1.3148</td><td>16.5154</td></tr>
+<tr><td>44</td><td>C</td><td>CTG</td><td>0.5986</td><td>9.6</td><td>0.0</td><td>26.3405</td><td>8.9743</td><td>3.4092</td><td>1.3742</td><td>20.3701</td></tr>
+<tr><td>45</td><td>T</td><td>TGA</td><td>0.5986</td><td>10.0</td><td>0.0</td><td>26.9391</td><td>9.7238</td><td>-2.3342</td><td>10.3485</td><td>23.7794</td></tr>
+<tr><td>46</td><td>G</td><td>GAA</td><td>0.5986</td><td>5.1</td><td>0.0</td><td>27.5378</td><td>3.4259</td><td>-3.7780</td><td>20.0722</td><td>21.4451</td></tr>
+<tr><td>47</td><td>A</td><td>AAT</td><td>0.5986</td><td>0.0</td><td>0.0</td><td>28.1364</td><td>0.0000</td><td>0.0000</td><td>23.4981</td><td>17.6671</td></tr>
+<tr><td>48</td><td>A</td><td>ATC</td><td>0.5986</td><td>3.6</td><td>0.0</td><td>28.7351</td><td>-1.6006</td><td>-3.2246</td><td>23.4981</td><td>17.6671</td></tr>
+<tr><td>49</td><td>T</td><td>TCT</td><td>0.5986</td><td>6.5</td><td>0.0</td><td>29.3337</td><td>-5.6684</td><td>-3.1811</td><td>21.8975</td><td>14.4425</td></tr>
+<tr><td>50</td><td>C</td><td>CTA</td><td>0.5986</td><td>7.8</td><td>0.0</td><td>29.9324</td><td>-7.7703</td><td>0.6796</td><td>16.2291</td><td>11.2614</td></tr>
+<tr><td>51</td><td>T</td><td>TAA</td><td>0.5986</td><td>7.3</td><td>0.0</td><td>30.5310</td><td>-5.6492</td><td>4.6235</td><td>8.4588</td><td>11.9410</td></tr>
+<tr><td>52</td><td>A</td><td>AAG</td><td>0.5986</td><td>4.2</td><td>0.0</td><td>31.1297</td><td>-1.1859</td><td>4.0291</td><td>2.8096</td><td>16.5645</td></tr>
+<tr><td>53</td><td>A</td><td>AGT</td><td>0.5986</td><td>2.0</td><td>0.0</td><td>31.7283</td><td>0.6147</td><td>1.9032</td><td>1.6237</td><td>20.5936</td></tr>
+<tr><td>54</td><td>G</td><td>GTG</td><td>0.5986</td><td>6.8</td><td>0.0</td><td>32.3270</td><td>5.3729</td><td>4.1679</td><td>2.2383</td><td>22.4968</td></tr>
+<tr><td>55</td><td>T</td><td>TGC</td><td>0.5986</td><td>7.5</td><td>0.0</td><td>32.9256</td><td>7.4860</td><td>0.4581</td><td>7.6113</td><td>26.6647</td></tr>
+<tr><td>56</td><td>G</td><td>GCT</td><td>0.5986</td><td>6.3</td><td>0.0</td><td>33.5243</td><td>5.4115</td><td>-3.2257</td><td>15.0973</td><td>27.1228</td></tr>
+<tr><td>57</td><td>C</td><td>CTA</td><td>0.5986</td><td>7.8</td><td>0.0</td><td>34.1229</td><td>3.2843</td><td>-7.0748</td><td>20.5088</td><td>23.8971</td></tr>
+<tr><td>58</td><td>T</td><td>TAA</td><td>0.5986</td><td>7.3</td><td>0.0</td><td>34.7216</td><td>-1.1921</td><td>-7.2020</td><td>23.7931</td><td>16.8222</td></tr>
+<tr><td>59</td><td>A</td><td>AAC</td><td>0.5986</td><td>1.6</td><td>0.0</td><td>35.3202</td><td>-1.1054</td><td>-1.1568</td><td>22.6010</td><td>9.6202</td></tr>
+<tr><td>60</td><td>A</td><td>ACA</td><td>0.5986</td><td>5.8</td><td>0.0</td><td>35.9188</td><td>-5.6732</td><td>-1.2061</td><td>21.4957</td><td>8.4635</td></tr>
+<tr><td>61</td><td>C</td><td>CAG</td><td>0.5986</td><td>9.6</td><td>0.0</td><td>36.5175</td><td>-8.8821</td><td>3.6425</td><td>15.8224</td><td>7.2574</td></tr>
+<tr><td>62</td><td>A</td><td>AGG</td><td>0.5986</td><td>4.7</td><td>0.0</td><td>37.1161</td><td>-2.5874</td><td>3.9237</td><td>6.9403</td><td>10.8999</td></tr>
+<tr><td>63</td><td>G</td><td>GGA</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>37.7148</td><td>0.0972</td><td>6.1992</td><td>4.3529</td><td>14.8236</td></tr>
+<tr><td>64</td><td>G</td><td>GAA</td><td>0.5986</td><td>5.1</td><td>0.0</td><td>38.3134</td><td>2.9397</td><td>4.1675</td><td>4.4501</td><td>21.0228</td></tr>
+<tr><td>65</td><td>A</td><td>AAA</td><td>0.5986</td><td>0.1</td><td>0.0</td><td>38.9121</td><td>0.0937</td><td>0.0350</td><td>7.3898</td><td>25.1904</td></tr>
+<tr><td>66</td><td>A</td><td>AAG</td><td>0.5986</td><td>4.2</td><td>0.0</td><td>39.5107</td><td>4.0788</td><td>-1.0017</td><td>7.4835</td><td>25.2254</td></tr>
+<tr><td>67</td><td>A</td><td>AGG</td><td>0.5986</td><td>4.7</td><td>0.0</td><td>40.1094</td><td>3.1389</td><td>-3.4982</td><td>11.5623</td><td>24.2237</td></tr>
+<tr><td>68</td><td>G</td><td>GGA</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>40.7080</td><td>0.8202</td><td>-6.1455</td><td>14.7012</td><td>20.7255</td></tr>
+<tr><td>69</td><td>G</td><td>GAT</td><td>0.5986</td><td>3.6</td><td>0.0</td><td>41.3067</td><td>-1.6174</td><td>-3.2162</td><td>15.5214</td><td>14.5800</td></tr>
+<tr><td>70</td><td>A</td><td>ATG</td><td>0.5986</td><td>8.7</td><td>0.0</td><td>41.9053</td><td>-7.6090</td><td>-4.2181</td><td>13.9040</td><td>11.3638</td></tr>
+<tr><td>71</td><td>T</td><td>TGC</td><td>0.5986</td><td>7.5</td><td>0.0</td><td>42.5040</td><td>-7.4680</td><td>0.6925</td><td>6.2949</td><td>7.1457</td></tr>
+<tr><td>72</td><td>G</td><td>GCC</td><td>0.5986</td><td>8.2</td><td>0.0</td><td>43.1026</td><td>-6.3184</td><td>5.2266</td><td>-1.1731</td><td>7.8382</td></tr>
+<tr><td>73</td><td>C</td><td>CCA</td><td>0.5986</td><td>0.7</td><td>0.0</td><td>43.7013</td><td>-0.1941</td><td>0.6725</td><td>-7.4915</td><td>13.0649</td></tr>
+<tr><td>74</td><td>C</td><td>CAG</td><td>0.5986</td><td>9.6</td><td>0.0</td><td>44.2999</td><td>2.9981</td><td>9.1198</td><td>-7.6856</td><td>13.7374</td></tr>
+<tr><td>75</td><td>A</td><td>AGA</td><td>0.5986</td><td>6.5</td><td>0.0</td><td>44.8986</td><td>5.1566</td><td>3.9571</td><td>-4.6875</td><td>22.8573</td></tr>
+<tr><td>76</td><td>G</td><td>GAT</td><td>0.5986</td><td>3.6</td><td>0.0</td><td>45.4972</td><td>3.5944</td><td>0.2011</td><td>0.4691</td><td>26.8144</td></tr>
+<tr><td>77</td><td>A</td><td>ATT</td><td>0.5986</td><td>0.0</td><td>0.0</td><td>46.0959</td><td>0.0000</td><td>0.0000</td><td>4.0635</td><td>27.0155</td></tr>
+<tr><td>78</td><td>T</td><td>TTG</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>46.6945</td><td>2.5812</td><td>-5.6372</td><td>4.0635</td><td>27.0155</td></tr>
+<tr><td>79</td><td>T</td><td>TGC</td><td>0.5986</td><td>7.5</td><td>0.0</td><td>47.2931</td><td>-1.2634</td><td>-7.3928</td><td>6.6447</td><td>21.3783</td></tr>
+<tr><td>80</td><td>G</td><td>GCA</td><td>0.5986</td><td>7.5</td><td>0.0</td><td>47.8918</td><td>-5.2097</td><td>-5.3953</td><td>5.3813</td><td>13.9855</td></tr>
+<tr><td>81</td><td>C</td><td>CAT</td><td>0.5986</td><td>8.7</td><td>0.0</td><td>48.4904</td><td>-8.5192</td><td>-1.7646</td><td>0.1716</td><td>8.5903</td></tr>
+<tr><td>82</td><td>A</td><td>ATG</td><td>0.5986</td><td>8.7</td><td>0.0</td><td>49.0891</td><td>-8.0321</td><td>3.3430</td><td>-8.3476</td><td>6.8257</td></tr>
+<tr><td>83</td><td>T</td><td>TGC</td><td>0.5986</td><td>7.5</td><td>0.0</td><td>49.6877</td><td>-4.0960</td><td>6.2827</td><td>-16.3797</td><td>10.1687</td></tr>
+<tr><td>84</td><td>G</td><td>GCC</td><td>0.5986</td><td>8.2</td><td>0.0</td><td>50.2864</td><td>0.1714</td><td>8.1982</td><td>-20.4757</td><td>16.4514</td></tr>
+<tr><td>85</td><td>C</td><td>CCT</td><td>0.5986</td><td>4.7</td><td>0.0</td><td>50.8850</td><td>2.7291</td><td>3.8265</td><td>-20.3043</td><td>24.6496</td></tr>
+<tr><td>86</td><td>C</td><td>CTG</td><td>0.5986</td><td>9.6</td><td>0.0</td><td>51.4837</td><td>9.0094</td><td>3.3153</td><td>-17.5752</td><td>28.4761</td></tr>
+<tr><td>87</td><td>T</td><td>TGC</td><td>0.5986</td><td>7.5</td><td>0.0</td><td>52.0823</td><td>7.2741</td><td>-1.8268</td><td>-8.5658</td><td>31.7913</td></tr>
+<tr><td>88</td><td>G</td><td>GCT</td><td>0.5986</td><td>6.3</td><td>0.0</td><td>52.6810</td><td>4.1829</td><td>-4.7109</td><td>-1.2917</td><td>29.9645</td></tr>
+<tr><td>89</td><td>C</td><td>CTG</td><td>0.5986</td><td>9.6</td><td>0.0</td><td>53.2796</td><td>1.2202</td><td>-9.5221</td><td>2.8913</td><td>25.2536</td></tr>
+<tr><td>90</td><td>T</td><td>TGA</td><td>0.5986</td><td>10.0</td><td>0.0</td><td>53.8783</td><td>-4.5395</td><td>-8.9103</td><td>4.1115</td><td>15.7315</td></tr>
+<tr><td>91</td><td>G</td><td>GAT</td><td>0.5986</td><td>3.6</td><td>0.0</td><td>54.4769</td><td>-3.1576</td><td>-1.7289</td><td>-0.4280</td><td>6.8212</td></tr>
+<tr><td>92</td><td>A</td><td>ATA</td><td>0.5986</td><td>9.7</td><td>0.0</td><td>55.0756</td><td>-9.6537</td><td>0.9461</td><td>-3.5856</td><td>5.0922</td></tr>
+<tr><td>93</td><td>T</td><td>TAA</td><td>0.5986</td><td>7.3</td><td>0.0</td><td>55.6742</td><td>-5.6005</td><td>4.6823</td><td>-13.2394</td><td>6.0383</td></tr>
+<tr><td>94</td><td>A</td><td>AAA</td><td>0.5986</td><td>0.1</td><td>0.0</td><td>56.2729</td><td>-0.0272</td><td>0.0962</td><td>-18.8399</td><td>10.7207</td></tr>
+<tr><td>95</td><td>A</td><td>AAG</td><td>0.5986</td><td>4.2</td><td>0.0</td><td>56.8715</td><td>1.3325</td><td>3.9830</td><td>-18.8671</td><td>10.8169</td></tr>
+<tr><td>96</td><td>A</td><td>AGC</td><td>0.5986</td><td>6.3</td><td>0.0</td><td>57.4702</td><td>5.0180</td><td>3.8092</td><td>-17.5346</td><td>14.7999</td></tr>
+<tr><td>97</td><td>G</td><td>GCC</td><td>0.5986</td><td>8.2</td><td>0.0</td><td>58.0688</td><td>8.1895</td><td>0.4153</td><td>-12.5167</td><td>18.6091</td></tr>
+<tr><td>98</td><td>C</td><td>CCA</td><td>0.5986</td><td>0.7</td><td>0.0</td><td>58.6674</td><td>0.5975</td><td>-0.3647</td><td>-4.3272</td><td>19.0244</td></tr>
+<tr><td>99</td><td>C</td><td>CAC</td><td>0.5986</td><td>6.8</td><td>0.0</td><td>59.2661</td><td>2.7986</td><td>-6.1974</td><td>-3.7297</td><td>18.6597</td></tr>
+<tr><td>100</td><td>A</td><td>ACA</td><td>0.5986</td><td>5.8</td><td>0.0</td><td>59.8647</td><td>-1.0069</td><td>-5.7119</td><td>-0.9311</td><td>12.4623</td></tr>
+<tr><td>101</td><td>C</td><td>CAG</td><td>0.5986</td><td>9.6</td><td>0.0</td><td>60.4634</td><td>-6.7044</td><td>-6.8710</td><td>-1.9380</td><td>6.7504</td></tr>
+<tr><td>102</td><td>A</td><td>AGT</td><td>0.5986</td><td>2.0</td><td>0.0</td><td>61.0620</td><td>-1.9605</td><td>-0.3954</td><td>-8.6424</td><td>-0.1206</td></tr>
+<tr><td>103</td><td>G</td><td>GTT</td><td>0.5986</td><td>1.6</td><td>0.0</td><td>61.6607</td><td>-1.4739</td><td>0.6225</td><td>-10.6029</td><td>-0.5160</td></tr>
+<tr><td>104</td><td>T</td><td>TTT</td><td>0.5986</td><td>0.1</td><td>0.0</td><td>62.2593</td><td>-0.0542</td><td>0.0841</td><td>-12.0768</td><td>0.1065</td></tr>
+<tr><td>105</td><td>T</td><td>TTG</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>62.8580</td><td>0.1620</td><td>6.1979</td><td>-12.1310</td><td>0.1905</td></tr>
+<tr><td>106</td><td>T</td><td>TGG</td><td>0.5986</td><td>0.7</td><td>0.0</td><td>63.4566</td><td>0.4094</td><td>0.5678</td><td>-11.9691</td><td>6.3884</td></tr>
+<tr><td>107</td><td>G</td><td>GGA</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>64.0553</td><td>5.8297</td><td>2.1107</td><td>-11.5596</td><td>6.9562</td></tr>
+<tr><td>108</td><td>G</td><td>GAC</td><td>0.5986</td><td>5.6</td><td>0.0</td><td>64.6539</td><td>5.4241</td><td>-1.3924</td><td>-5.7299</td><td>9.0669</td></tr>
+<tr><td>109</td><td>A</td><td>ACT</td><td>0.5986</td><td>2.0</td><td>0.0</td><td>65.2526</td><td>1.3201</td><td>-1.5025</td><td>-0.3058</td><td>7.6745</td></tr>
+<tr><td>110</td><td>C</td><td>CTG</td><td>0.5986</td><td>9.6</td><td>0.0</td><td>65.8512</td><td>1.1705</td><td>-9.5284</td><td>1.0143</td><td>6.1720</td></tr>
+<tr><td>111</td><td>T</td><td>TGT</td><td>0.5986</td><td>5.8</td><td>0.0</td><td>66.4499</td><td>-2.6599</td><td>-5.1541</td><td>2.1848</td><td>-3.3563</td></tr>
+<tr><td>112</td><td>G</td><td>GTC</td><td>0.5986</td><td>5.6</td><td>0.0</td><td>67.0485</td><td>-4.9259</td><td>-2.6638</td><td>-0.4751</td><td>-8.5105</td></tr>
+<tr><td>113</td><td>T</td><td>TCA</td><td>0.5986</td><td>10.0</td><td>0.0</td><td>67.6472</td><td>-9.9471</td><td>1.0274</td><td>-5.4010</td><td>-11.1742</td></tr>
+<tr><td>114</td><td>C</td><td>CAC</td><td>0.5986</td><td>6.8</td><td>0.0</td><td>68.2458</td><td>-5.1941</td><td>4.3888</td><td>-15.3481</td><td>-10.1469</td></tr>
+<tr><td>115</td><td>A</td><td>ACT</td><td>0.5986</td><td>2.0</td><td>0.0</td><td>68.8445</td><td>-0.5346</td><td>1.9272</td><td>-20.5422</td><td>-5.7581</td></tr>
+<tr><td>116</td><td>C</td><td>CTC</td><td>0.5986</td><td>6.6</td><td>0.0</td><td>69.4431</td><td>2.1266</td><td>6.2480</td><td>-21.0767</td><td>-3.8308</td></tr>
+<tr><td>117</td><td>T</td><td>TCA</td><td>0.5986</td><td>10.0</td><td>0.0</td><td>70.0417</td><td>7.9965</td><td>6.0047</td><td>-18.9502</td><td>2.4172</td></tr>
+<tr><td>118</td><td>C</td><td>CAA</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>70.6404</td><td>6.1936</td><td>0.2816</td><td>-10.9537</td><td>8.4218</td></tr>
+<tr><td>119</td><td>A</td><td>AAT</td><td>0.5986</td><td>0.0</td><td>0.0</td><td>71.2390</td><td>0.0000</td><td>0.0000</td><td>-4.7601</td><td>8.7035</td></tr>
+<tr><td>120</td><td>A</td><td>ATC</td><td>0.5986</td><td>3.6</td><td>0.0</td><td>71.8377</td><td>1.4645</td><td>-3.2887</td><td>-4.7601</td><td>8.7035</td></tr>
+<tr><td>121</td><td>T</td><td>TCA</td><td>0.5986</td><td>10.0</td><td>0.0</td><td>72.4363</td><td>-1.7874</td><td>-9.8390</td><td>-3.2956</td><td>5.4148</td></tr>
+<tr><td>122</td><td>C</td><td>CAC</td><td>0.5986</td><td>6.8</td><td>0.0</td><td>73.0350</td><td>-4.7743</td><td>-4.8421</td><td>-5.0830</td><td>-4.4242</td></tr>
+<tr><td>123</td><td>A</td><td>ACC</td><td>0.5986</td><td>5.2</td><td>0.0</td><td>73.6336</td><td>-5.1027</td><td>-1.0014</td><td>-9.8574</td><td>-9.2662</td></tr>
+<tr><td>124</td><td>C</td><td>CCA</td><td>0.5986</td><td>0.7</td><td>0.0</td><td>74.2323</td><td>-0.6434</td><td>0.2757</td><td>-14.9600</td><td>-10.2677</td></tr>
+<tr><td>125</td><td>C</td><td>CAT</td><td>0.5986</td><td>8.7</td><td>0.0</td><td>74.8309</td><td>-4.6750</td><td>7.3372</td><td>-15.6034</td><td>-9.9920</td></tr>
+<tr><td>126</td><td>A</td><td>ATC</td><td>0.5986</td><td>3.6</td><td>0.0</td><td>75.4296</td><td>0.1128</td><td>3.5982</td><td>-20.2784</td><td>-2.6547</td></tr>
+<tr><td>127</td><td>T</td><td>TCG</td><td>0.5986</td><td>5.8</td><td>0.0</td><td>76.0282</td><td>3.4170</td><td>4.6866</td><td>-20.1656</td><td>0.9435</td></tr>
+<tr><td>128</td><td>C</td><td>CGT</td><td>0.5986</td><td>5.2</td><td>0.0</td><td>76.6269</td><td>4.8986</td><td>1.7447</td><td>-16.7485</td><td>5.6300</td></tr>
+<tr><td>129</td><td>G</td><td>GTT</td><td>0.5986</td><td>1.6</td><td>0.0</td><td>77.2255</td><td>1.5477</td><td>-0.4059</td><td>-11.8499</td><td>7.3747</td></tr>
+<tr><td>130</td><td>T</td><td>TTC</td><td>0.5986</td><td>5.1</td><td>0.0</td><td>77.8242</td><td>3.3462</td><td>-3.8488</td><td>-10.3023</td><td>6.9688</td></tr>
+<tr><td>131</td><td>T</td><td>TCC</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>78.4228</td><td>0.7238</td><td>-6.1576</td><td>-6.9561</td><td>3.1200</td></tr>
+<tr><td>132</td><td>C</td><td>CCT</td><td>0.5986</td><td>4.7</td><td>0.0</td><td>79.0215</td><td>-2.1772</td><td>-4.1653</td><td>-6.2324</td><td>-3.0376</td></tr>
+<tr><td>133</td><td>C</td><td>CTC</td><td>0.5986</td><td>6.6</td><td>0.0</td><td>79.6201</td><td>-5.8218</td><td>-3.1091</td><td>-8.4096</td><td>-7.2029</td></tr>
+<tr><td>134</td><td>T</td><td>TCC</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>80.2188</td><td>-6.1638</td><td>0.6692</td><td>-14.2314</td><td>-10.3120</td></tr>
+<tr><td>135</td><td>C</td><td>CCT</td><td>0.5986</td><td>4.7</td><td>0.0</td><td>80.8174</td><td>-3.5741</td><td>3.0522</td><td>-20.3952</td><td>-9.6428</td></tr>
+<tr><td>136</td><td>C</td><td>CTG</td><td>0.5986</td><td>9.6</td><td>0.0</td><td>81.4161</td><td>-2.5177</td><td>9.2640</td><td>-23.9693</td><td>-6.5906</td></tr>
+<tr><td>137</td><td>T</td><td>TGT</td><td>0.5986</td><td>5.8</td><td>0.0</td><td>82.0147</td><td>1.8975</td><td>5.4808</td><td>-26.4870</td><td>2.6733</td></tr>
+<tr><td>138</td><td>G</td><td>GTG</td><td>0.5986</td><td>6.8</td><td>0.0</td><td>82.6133</td><td>5.4589</td><td>4.0547</td><td>-24.5895</td><td>8.1542</td></tr>
+<tr><td>139</td><td>T</td><td>TGA</td><td>0.5986</td><td>10.0</td><td>0.0</td><td>83.2120</td><td>9.9919</td><td>0.4020</td><td>-19.1306</td><td>12.2089</td></tr>
+<tr><td>140</td><td>G</td><td>GAC</td><td>0.5986</td><td>5.6</td><td>0.0</td><td>83.8106</td><td>4.7493</td><td>-2.9672</td><td>-9.1387</td><td>12.6109</td></tr>
+<tr><td>141</td><td>A</td><td>ACT</td><td>0.5986</td><td>2.0</td><td>0.0</td><td>84.4093</td><td>0.8040</td><td>-1.8313</td><td>-4.3894</td><td>9.6437</td></tr>
+<tr><td>142</td><td>C</td><td>CTC</td><td>0.5986</td><td>6.6</td><td>0.0</td><td>85.0079</td><td>-1.2136</td><td>-6.4875</td><td>-3.5854</td><td>7.8124</td></tr>
+<tr><td>143</td><td>T</td><td>TCA</td><td>0.5986</td><td>10.0</td><td>0.0</td><td>85.6066</td><td>-7.0582</td><td>-7.0839</td><td>-4.7990</td><td>1.3250</td></tr>
+<tr><td>144</td><td>C</td><td>CAG</td><td>0.5986</td><td>9.6</td><td>0.0</td><td>86.2052</td><td>-9.4298</td><td>-1.7995</td><td>-11.8572</td><td>-5.7589</td></tr>
+<tr><td>145</td><td>A</td><td>AGT</td><td>0.5986</td><td>2.0</td><td>0.0</td><td>86.8039</td><td>-1.8342</td><td>0.7974</td><td>-21.2870</td><td>-7.5585</td></tr>
+<tr><td>146</td><td>G</td><td>GTA</td><td>0.5986</td><td>6.4</td><td>0.0</td><td>87.4025</td><td>-3.4108</td><td>5.4154</td><td>-23.1212</td><td>-6.7611</td></tr>
+<tr><td>147</td><td>T</td><td>TAT</td><td>0.5986</td><td>9.7</td><td>0.0</td><td>88.0012</td><td>0.3547</td><td>9.6935</td><td>-26.5320</td><td>-1.3457</td></tr>
+<tr><td>148</td><td>A</td><td>ATA</td><td>0.5986</td><td>9.7</td><td>0.0</td><td>88.5998</td><td>5.7556</td><td>7.8079</td><td>-26.1773</td><td>8.3478</td></tr>
+<tr><td>149</td><td>T</td><td>TAA</td><td>0.5986</td><td>7.3</td><td>0.0</td><td>89.1985</td><td>6.8896</td><td>2.4133</td><td>-20.4217</td><td>16.1557</td></tr>
+<tr><td>150</td><td>A</td><td>AAC</td><td>0.5986</td><td>1.6</td><td>0.0</td><td>89.7971</td><td>1.5455</td><td>-0.4140</td><td>-13.5321</td><td>18.5690</td></tr>
+<tr><td>151</td><td>A</td><td>ACA</td><td>0.5986</td><td>5.8</td><td>0.0</td><td>90.3958</td><td>3.7825</td><td>-4.3969</td><td>-11.9866</td><td>18.1550</td></tr>
+<tr><td>152</td><td>C</td><td>CAA</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>90.9944</td><td>0.6916</td><td>-6.1613</td><td>-8.2041</td><td>13.7581</td></tr>
+<tr><td>153</td><td>A</td><td>AAG</td><td>0.5986</td><td>4.2</td><td>0.0</td><td>91.5931</td><td>-1.9650</td><td>-3.7120</td><td>-7.5125</td><td>7.5968</td></tr>
+<tr><td>154</td><td>A</td><td>AGA</td><td>0.5986</td><td>6.5</td><td>0.0</td><td>92.1917</td><td>-5.7495</td><td>-3.0320</td><td>-9.4776</td><td>3.8848</td></tr>
+<tr><td>155</td><td>G</td><td>GAT</td><td>0.5986</td><td>3.6</td><td>0.0</td><td>92.7904</td><td>-3.5769</td><td>0.4073</td><td>-15.2271</td><td>0.8528</td></tr>
+<tr><td>156</td><td>A</td><td>ATT</td><td>0.5986</td><td>0.0</td><td>0.0</td><td>93.3890</td><td>0.0000</td><td>0.0000</td><td>-18.8040</td><td>1.2601</td></tr>
+<tr><td>157</td><td>T</td><td>TTG</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>93.9876</td><td>-1.5947</td><td>5.9914</td><td>-18.8040</td><td>1.2601</td></tr>
+<tr><td>158</td><td>T</td><td>TGG</td><td>0.5986</td><td>0.7</td><td>0.0</td><td>94.5863</td><td>0.2325</td><td>0.6603</td><td>-20.3987</td><td>7.2515</td></tr>
+<tr><td>159</td><td>G</td><td>GGG</td><td>0.5986</td><td>5.7</td><td>0.0</td><td>95.1849</td><td>4.5935</td><td>3.3748</td><td>-20.1662</td><td>7.9118</td></tr>
+<tr><td>160</td><td>G</td><td>GGA</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>95.7836</td><td>6.1962</td><td>0.2169</td><td>-15.5727</td><td>11.2866</td></tr>
+<tr><td>161</td><td>G</td><td>GAG</td><td>0.5986</td><td>6.6</td><td>0.0</td><td>96.3822</td><td>5.5790</td><td>-3.5263</td><td>-9.3765</td><td>11.5035</td></tr>
+<tr><td>162</td><td>A</td><td>AGA</td><td>0.5986</td><td>6.5</td><td>0.0</td><td>96.9809</td><td>2.5819</td><td>-5.9652</td><td>-3.7975</td><td>7.9772</td></tr>
+<tr><td>163</td><td>G</td><td>GAA</td><td>0.5986</td><td>5.1</td><td>0.0</td><td>97.5795</td><td>-0.9640</td><td>-5.0081</td><td>-1.2155</td><td>2.0120</td></tr>
+<tr><td>164</td><td>A</td><td>AAT</td><td>0.5986</td><td>0.0</td><td>0.0</td><td>98.1782</td><td>0.0000</td><td>0.0000</td><td>-2.1795</td><td>-2.9961</td></tr>
+<tr><td>165</td><td>A</td><td>ATA</td><td>0.5986</td><td>9.7</td><td>0.0</td><td>98.7768</td><td>-9.5374</td><td>-1.7685</td><td>-2.1795</td><td>-2.9961</td></tr>
+<tr><td>166</td><td>T</td><td>TAC</td><td>0.5986</td><td>6.4</td><td>0.0</td><td>99.3755</td><td>-5.8560</td><td>2.5822</td><td>-11.7169</td><td>-4.7645</td></tr>
+<tr><td>167</td><td>A</td><td>ACT</td><td>0.5986</td><td>2.0</td><td>0.0</td><td>99.9741</td><td>-1.0570</td><td>1.6979</td><td>-17.5729</td><td>-2.1823</td></tr>
+<tr><td>168</td><td>C</td><td>CTC</td><td>0.5986</td><td>6.6</td><td>0.0</td><td>100.5728</td><td>0.2758</td><td>6.5942</td><td>-18.6299</td><td>-0.4845</td></tr>
+<tr><td>169</td><td>T</td><td>TCT</td><td>0.5986</td><td>6.5</td><td>0.0</td><td>101.1714</td><td>3.8841</td><td>5.2119</td><td>-18.3541</td><td>6.1098</td></tr>
+<tr><td>170</td><td>C</td><td>CTA</td><td>0.5986</td><td>7.8</td><td>0.0</td><td>101.7701</td><td>7.3748</td><td>2.5401</td><td>-14.4700</td><td>11.3216</td></tr>
+<tr><td>171</td><td>T</td><td>TAC</td><td>0.5986</td><td>6.4</td><td>0.0</td><td>102.3687</td><td>6.1733</td><td>-1.6883</td><td>-7.0951</td><td>13.8617</td></tr>
+<tr><td>172</td><td>A</td><td>ACA</td><td>0.5986</td><td>5.8</td><td>0.0</td><td>102.9674</td><td>3.7595</td><td>-4.4166</td><td>-0.9218</td><td>12.1734</td></tr>
+<tr><td>173</td><td>C</td><td>CAG</td><td>0.5986</td><td>9.6</td><td>0.0</td><td>103.5660</td><td>1.0210</td><td>-9.5456</td><td>2.8376</td><td>7.7568</td></tr>
+<tr><td>174</td><td>A</td><td>AGT</td><td>0.5986</td><td>2.0</td><td>0.0</td><td>104.1647</td><td>-0.9449</td><td>-1.7627</td><td>3.8586</td><td>-1.7887</td></tr>
+<tr><td>175</td><td>G</td><td>GTT</td><td>0.5986</td><td>1.6</td><td>0.0</td><td>104.7633</td><td>-1.4192</td><td>-0.7389</td><td>2.9137</td><td>-3.5514</td></tr>
+<tr><td>176</td><td>T</td><td>TTC</td><td>0.5986</td><td>5.1</td><td>0.0</td><td>105.3619</td><td>-5.0642</td><td>0.6034</td><td>1.4945</td><td>-4.2903</td></tr>
+<tr><td>177</td><td>T</td><td>TCC</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>105.9606</td><td>-4.6725</td><td>4.0753</td><td>-3.5697</td><td>-3.6869</td></tr>
+<tr><td>178</td><td>C</td><td>CCT</td><td>0.5986</td><td>4.7</td><td>0.0</td><td>106.5592</td><td>-1.1851</td><td>4.5481</td><td>-8.2421</td><td>0.3884</td></tr>
+<tr><td>179</td><td>C</td><td>CTG</td><td>0.5986</td><td>9.6</td><td>0.0</td><td>107.1579</td><td>3.2353</td><td>9.0384</td><td>-9.4273</td><td>4.9365</td></tr>
+<tr><td>180</td><td>T</td><td>TGA</td><td>0.5986</td><td>10.0</td><td>0.0</td><td>107.7565</td><td>8.0896</td><td>5.8786</td><td>-6.1920</td><td>13.9749</td></tr>
+<tr><td>181</td><td>G</td><td>GAT</td><td>0.5986</td><td>3.6</td><td>0.0</td><td>108.3552</td><td>3.5984</td><td>0.1071</td><td>1.8977</td><td>19.8535</td></tr>
+<tr><td>182</td><td>A</td><td>ATT</td><td>0.5986</td><td>0.0</td><td>0.0</td><td>108.9538</td><td>0.0000</td><td>0.0000</td><td>5.4961</td><td>19.9606</td></tr>
+<tr><td>183</td><td>T</td><td>TTC</td><td>0.5986</td><td>5.1</td><td>0.0</td><td>109.5525</td><td>2.0014</td><td>-4.6909</td><td>5.4961</td><td>19.9606</td></tr>
+<tr><td>184</td><td>T</td><td>TCC</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>110.1511</td><td>-1.2037</td><td>-6.0820</td><td>7.4974</td><td>15.2697</td></tr>
+<tr><td>185</td><td>C</td><td>CCC</td><td>0.5986</td><td>5.7</td><td>0.0</td><td>110.7498</td><td>-4.0652</td><td>-3.9956</td><td>6.2937</td><td>9.1877</td></tr>
+<tr><td>186</td><td>C</td><td>CCC</td><td>0.5986</td><td>5.7</td><td>0.0</td><td>111.3484</td><td>-5.6098</td><td>-1.0099</td><td>2.2286</td><td>5.1921</td></tr>
+<tr><td>187</td><td>C</td><td>CCC</td><td>0.5986</td><td>5.7</td><td>0.0</td><td>111.9471</td><td>-5.2034</td><td>2.3270</td><td>-3.3812</td><td>4.1822</td></tr>
+<tr><td>188</td><td>C</td><td>CCA</td><td>0.5986</td><td>0.7</td><td>0.0</td><td>112.5457</td><td>-0.3668</td><td>0.5962</td><td>-8.5846</td><td>6.5092</td></tr>
+<tr><td>189</td><td>C</td><td>CAC</td><td>0.5986</td><td>6.8</td><td>0.0</td><td>113.1444</td><td>0.3197</td><td>6.7925</td><td>-8.9514</td><td>7.1054</td></tr>
+<tr><td>190</td><td>A</td><td>ACA</td><td>0.5986</td><td>5.8</td><td>0.0</td><td>113.7430</td><td>3.4901</td><td>4.6324</td><td>-8.6318</td><td>13.8979</td></tr>
+<tr><td>191</td><td>C</td><td>CAG</td><td>0.5986</td><td>9.6</td><td>0.0</td><td>114.3417</td><td>9.0929</td><td>3.0788</td><td>-5.1417</td><td>18.5303</td></tr>
+<tr><td>192</td><td>A</td><td>AGA</td><td>0.5986</td><td>6.5</td><td>0.0</td><td>114.9403</td><td>6.2607</td><td>-1.7474</td><td>3.9512</td><td>21.6091</td></tr>
+<tr><td>193</td><td>G</td><td>GAA</td><td>0.5986</td><td>5.1</td><td>0.0</td><td>115.5390</td><td>3.2854</td><td>-3.9008</td><td>10.2120</td><td>19.8617</td></tr>
+<tr><td>194</td><td>A</td><td>AAG</td><td>0.5986</td><td>4.2</td><td>0.0</td><td>116.1376</td><td>0.4248</td><td>-4.1785</td><td>13.4974</td><td>15.9609</td></tr>
+<tr><td>195</td><td>A</td><td>AGT</td><td>0.5986</td><td>2.0</td><td>0.0</td><td>116.7362</td><td>-0.9541</td><td>-1.7577</td><td>13.9222</td><td>11.7825</td></tr>
+<tr><td>196</td><td>G</td><td>GTG</td><td>0.5986</td><td>6.8</td><td>0.0</td><td>117.3349</td><td>-6.0477</td><td>-3.1089</td><td>12.9681</td><td>10.0247</td></tr>
+<tr><td>197</td><td>T</td><td>TGA</td><td>0.5986</td><td>10.0</td><td>0.0</td><td>117.9335</td><td>-9.9234</td><td>1.2350</td><td>6.9203</td><td>6.9159</td></tr>
+<tr><td>198</td><td>G</td><td>GAA</td><td>0.5986</td><td>5.1</td><td>0.0</td><td>118.5322</td><td>-3.8259</td><td>3.3723</td><td>-3.0031</td><td>8.1509</td></tr>
+<tr><td>199</td><td>A</td><td>AAA</td><td>0.5986</td><td>0.1</td><td>0.0</td><td>119.1308</td><td>-0.0247</td><td>0.0969</td><td>-6.8290</td><td>11.5232</td></tr>
+<tr><td>200</td><td>A</td><td>AAG</td><td>0.5986</td><td>4.2</td><td>0.0</td><td>119.7295</td><td>1.4361</td><td>3.9469</td><td>-6.8537</td><td>11.6201</td></tr>
+<tr><td>201</td><td>A</td><td>AGA</td><td>0.5986</td><td>6.5</td><td>0.0</td><td>120.3281</td><td>5.2782</td><td>3.7936</td><td>-5.4176</td><td>15.5670</td></tr>
+<tr><td>202</td><td>G</td><td>GAG</td><td>0.5986</td><td>6.6</td><td>0.0</td><td>120.9268</td><td>6.5980</td><td>0.1619</td><td>-0.1395</td><td>19.3605</td></tr>
+<tr><td>203</td><td>A</td><td>AGA</td><td>0.5986</td><td>6.5</td><td>0.0</td><td>121.5254</td><td>5.4579</td><td>-3.5301</td><td>6.4585</td><td>19.5224</td></tr>
+<tr><td>204</td><td>G</td><td>GAA</td><td>0.5986</td><td>5.1</td><td>0.0</td><td>122.1241</td><td>1.9768</td><td>-4.7013</td><td>11.9164</td><td>15.9924</td></tr>
+<tr><td>205</td><td>A</td><td>AAT</td><td>0.5986</td><td>0.0</td><td>0.0</td><td>122.7227</td><td>0.0000</td><td>0.0000</td><td>13.8933</td><td>11.2911</td></tr>
+<tr><td>206</td><td>A</td><td>ATA</td><td>0.5986</td><td>9.7</td><td>0.0</td><td>123.3214</td><td>-6.9533</td><td>-6.7632</td><td>13.8933</td><td>11.2911</td></tr>
+<tr><td>207</td><td>T</td><td>TAC</td><td>0.5986</td><td>6.4</td><td>0.0</td><td>123.9200</td><td>-6.3046</td><td>-1.1010</td><td>6.9399</td><td>4.5278</td></tr>
+<tr><td>208</td><td>A</td><td>ACT</td><td>0.5986</td><td>2.0</td><td>0.0</td><td>124.5187</td><td>-1.8215</td><td>0.8260</td><td>0.6353</td><td>3.4268</td></tr>
+<tr><td>209</td><td>C</td><td>CTG</td><td>0.5986</td><td>9.6</td><td>0.0</td><td>125.1173</td><td>-4.9882</td><td>8.2023</td><td>-1.1861</td><td>4.2528</td></tr>
+<tr><td>210</td><td>T</td><td>TGC</td><td>0.5986</td><td>7.5</td><td>0.0</td><td>125.7160</td><td>0.3917</td><td>7.4898</td><td>-6.1744</td><td>12.4551</td></tr>
+<tr><td>211</td><td>G</td><td>GCA</td><td>0.5986</td><td>7.5</td><td>0.0</td><td>126.3146</td><td>4.5443</td><td>5.9665</td><td>-5.7826</td><td>19.9449</td></tr>
+<tr><td>212</td><td>C</td><td>CAA</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>126.9133</td><td>5.8828</td><td>1.9577</td><td>-1.2384</td><td>25.9114</td></tr>
+<tr><td>213</td><td>A</td><td>AAC</td><td>0.5986</td><td>1.6</td><td>0.0</td><td>127.5119</td><td>1.5388</td><td>-0.4382</td><td>4.6445</td><td>27.8691</td></tr>
+<tr><td>214</td><td>A</td><td>ACA</td><td>0.5986</td><td>5.8</td><td>0.0</td><td>128.1105</td><td>3.7131</td><td>-4.4556</td><td>6.1833</td><td>27.4309</td></tr>
+<tr><td>215</td><td>C</td><td>CAC</td><td>0.5986</td><td>6.8</td><td>0.0</td><td>128.7092</td><td>0.6525</td><td>-6.7686</td><td>9.8964</td><td>22.9753</td></tr>
+<tr><td>216</td><td>A</td><td>ACA</td><td>0.5986</td><td>5.8</td><td>0.0</td><td>129.3078</td><td>-2.7936</td><td>-5.0829</td><td>10.5489</td><td>16.2066</td></tr>
+<tr><td>217</td><td>C</td><td>CAC</td><td>0.5986</td><td>6.8</td><td>0.0</td><td>129.9065</td><td>-6.0639</td><td>-3.0772</td><td>7.7553</td><td>11.1238</td></tr>
+<tr><td>218</td><td>A</td><td>ACA</td><td>0.5986</td><td>5.8</td><td>0.0</td><td>130.5051</td><td>-5.7518</td><td>0.7464</td><td>1.6914</td><td>8.0465</td></tr>
+<tr><td>219</td><td>C</td><td>CAT</td><td>0.5986</td><td>8.7</td><td>0.0</td><td>131.1038</td><td>-6.4964</td><td>5.7868</td><td>-4.0604</td><td>8.7929</td></tr>
+<tr><td>220</td><td>A</td><td>ATT</td><td>0.5986</td><td>0.0</td><td>0.0</td><td>131.7024</td><td>0.0000</td><td>0.0000</td><td>-10.5568</td><td>14.5797</td></tr>
+<tr><td>221</td><td>T</td><td>TTC</td><td>0.5986</td><td>5.1</td><td>0.0</td><td>132.3011</td><td>1.7688</td><td>4.7834</td><td>-10.5568</td><td>14.5797</td></tr>
+<tr><td>222</td><td>T</td><td>TCA</td><td>0.5986</td><td>10.0</td><td>0.0</td><td>132.8997</td><td>8.1506</td><td>5.7937</td><td>-8.7879</td><td>19.3631</td></tr>
+<tr><td>223</td><td>C</td><td>CAG</td><td>0.5986</td><td>9.6</td><td>0.0</td><td>133.4984</td><td>9.5982</td><td>0.1854</td><td>-0.6373</td><td>25.1569</td></tr>
+<tr><td>224</td><td>A</td><td>AGT</td><td>0.5986</td><td>2.0</td><td>0.0</td><td>134.0970</td><td>1.6737</td><td>-1.0949</td><td>8.9609</td><td>25.3422</td></tr>
+<tr><td>225</td><td>G</td><td>GTG</td><td>0.5986</td><td>6.8</td><td>0.0</td><td>134.6957</td><td>2.6030</td><td>-6.2821</td><td>10.6346</td><td>24.2473</td></tr>
+<tr><td>226</td><td>T</td><td>TGT</td><td>0.5986</td><td>5.8</td><td>0.0</td><td>135.2943</td><td>-1.1854</td><td>-5.6776</td><td>13.2375</td><td>17.9652</td></tr>
+<tr><td>227</td><td>G</td><td>GTT</td><td>0.5986</td><td>1.6</td><td>0.0</td><td>135.8930</td><td>-1.1528</td><td>-1.1096</td><td>12.0521</td><td>12.2877</td></tr>
+<tr><td>228</td><td>T</td><td>TTC</td><td>0.5986</td><td>5.1</td><td>0.0</td><td>136.4916</td><td>-5.0285</td><td>-0.8511</td><td>10.8993</td><td>11.1781</td></tr>
+<tr><td>229</td><td>T</td><td>TCA</td><td>0.5986</td><td>10.0</td><td>0.0</td><td>137.0903</td><td>-9.0856</td><td>4.1776</td><td>5.8709</td><td>10.3270</td></tr>
+<tr><td>230</td><td>C</td><td>CAG</td><td>0.5986</td><td>9.6</td><td>0.0</td><td>137.6889</td><td>-4.9453</td><td>8.2282</td><td>-3.2147</td><td>14.5046</td></tr>
+<tr><td>231</td><td>A</td><td>AGA</td><td>0.5986</td><td>6.5</td><td>0.0</td><td>138.2876</td><td>0.3734</td><td>6.4893</td><td>-8.1600</td><td>22.7328</td></tr>
+<tr><td>232</td><td>G</td><td>GAC</td><td>0.5986</td><td>5.6</td><td>0.0</td><td>138.8862</td><td>3.4163</td><td>4.4372</td><td>-7.7866</td><td>29.2221</td></tr>
+<tr><td>233</td><td>A</td><td>ACT</td><td>0.5986</td><td>2.0</td><td>0.0</td><td>139.4849</td><td>1.9010</td><td>0.6216</td><td>-4.3703</td><td>33.6593</td></tr>
+<tr><td>234</td><td>C</td><td>CTT</td><td>0.5986</td><td>4.2</td><td>0.0</td><td>140.0835</td><td>4.0334</td><td>-1.1713</td><td>-2.4694</td><td>34.2809</td></tr>
+<tr><td>235</td><td>T</td><td>TTC</td><td>0.5986</td><td>5.1</td><td>0.0</td><td>140.6821</td><td>3.2445</td><td>-3.9349</td><td>1.5640</td><td>33.1096</td></tr>
+<tr><td>236</td><td>T</td><td>TCA</td><td>0.5986</td><td>10.0</td><td>0.0</td><td>141.2808</td><td>0.9075</td><td>-9.9587</td><td>4.8085</td><td>29.1747</td></tr>
+<tr><td>237</td><td>C</td><td>CAG</td><td>0.5986</td><td>9.6</td><td>0.0</td><td>141.8794</td><td>-4.6678</td><td>-8.3888</td><td>5.7160</td><td>19.2160</td></tr>
+<tr><td>238</td><td>A</td><td>AGG</td><td>0.5986</td><td>4.7</td><td>0.0</td><td>142.4781</td><td>-4.2023</td><td>-2.1050</td><td>1.0482</td><td>10.8272</td></tr>
+<tr><td>239</td><td>G</td><td>GGG</td><td>0.5986</td><td>5.7</td><td>0.0</td><td>143.0767</td><td>-5.6487</td><td>0.7630</td><td>-3.1541</td><td>8.7222</td></tr>
+<tr><td>240</td><td>G</td><td>GGG</td><td>0.5986</td><td>5.7</td><td>0.0</td><td>143.6754</td><td>-4.2364</td><td>3.8135</td><td>-8.8028</td><td>9.4853</td></tr>
+<tr><td>241</td><td>G</td><td>GGA</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>144.2740</td><td>-1.4691</td><td>6.0234</td><td>-13.0392</td><td>13.2988</td></tr>
+<tr><td>242</td><td>G</td><td>GAG</td><td>0.5986</td><td>6.6</td><td>0.0</td><td>144.8727</td><td>2.3214</td><td>6.1783</td><td>-14.5083</td><td>19.3222</td></tr>
+<tr><td>243</td><td>A</td><td>AGT</td><td>0.5986</td><td>2.0</td><td>0.0</td><td>145.4713</td><td>1.6362</td><td>1.1502</td><td>-12.1869</td><td>25.5005</td></tr>
+<tr><td>244</td><td>G</td><td>GTT</td><td>0.5986</td><td>1.6</td><td>0.0</td><td>146.0700</td><td>1.5998</td><td>0.0225</td><td>-10.5508</td><td>26.6507</td></tr>
+<tr><td>245</td><td>T</td><td>TTG</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>146.6686</td><td>5.1705</td><td>-3.4214</td><td>-8.9509</td><td>26.6732</td></tr>
+<tr><td>246</td><td>T</td><td>TGC</td><td>0.5986</td><td>7.5</td><td>0.0</td><td>147.2673</td><td>2.8347</td><td>-6.9437</td><td>-3.7804</td><td>23.2519</td></tr>
+<tr><td>247</td><td>G</td><td>GCC</td><td>0.5986</td><td>8.2</td><td>0.0</td><td>147.8659</td><td>-1.7179</td><td>-8.0180</td><td>-0.9457</td><td>16.3082</td></tr>
+<tr><td>248</td><td>C</td><td>CCA</td><td>0.5986</td><td>0.7</td><td>0.0</td><td>148.4646</td><td>-0.5069</td><td>-0.4828</td><td>-2.6636</td><td>8.2902</td></tr>
+<tr><td>249</td><td>C</td><td>CAA</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>149.0632</td><td>-6.1184</td><td>-1.0027</td><td>-3.1705</td><td>7.8074</td></tr>
+<tr><td>250</td><td>A</td><td>AAG</td><td>0.5986</td><td>4.2</td><td>0.0</td><td>149.6619</td><td>-3.8067</td><td>1.7745</td><td>-9.2889</td><td>6.8047</td></tr>
+<tr><td>251</td><td>A</td><td>AGT</td><td>0.5986</td><td>2.0</td><td>0.0</td><td>150.2605</td><td>-1.0213</td><td>1.7196</td><td>-13.0956</td><td>8.5792</td></tr>
+<tr><td>252</td><td>G</td><td>GTG</td><td>0.5986</td><td>6.8</td><td>0.0</td><td>150.8592</td><td>0.4261</td><td>6.7866</td><td>-14.1169</td><td>10.2987</td></tr>
+<tr><td>253</td><td>T</td><td>TGA</td><td>0.5986</td><td>10.0</td><td>0.0</td><td>151.4578</td><td>6.1418</td><td>7.8916</td><td>-13.6908</td><td>17.0854</td></tr>
+<tr><td>254</td><td>G</td><td>GAT</td><td>0.5986</td><td>3.6</td><td>0.0</td><td>152.0564</td><td>3.4275</td><td>1.1009</td><td>-7.5489</td><td>24.9770</td></tr>
+<tr><td>255</td><td>A</td><td>ATT</td><td>0.5986</td><td>0.0</td><td>0.0</td><td>152.6551</td><td>0.0000</td><td>0.0000</td><td>-4.1214</td><td>26.0779</td></tr>
+<tr><td>256</td><td>T</td><td>TTG</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>153.2537</td><td>3.9192</td><td>-4.8041</td><td>-4.1214</td><td>26.0779</td></tr>
+<tr><td>257</td><td>T</td><td>TGT</td><td>0.5986</td><td>5.8</td><td>0.0</td><td>153.8524</td><td>0.4962</td><td>-5.7787</td><td>-0.2022</td><td>21.2738</td></tr>
+<tr><td>258</td><td>G</td><td>GTT</td><td>0.5986</td><td>1.6</td><td>0.0</td><td>154.4510</td><td>-0.7853</td><td>-1.3940</td><td>0.2940</td><td>15.4951</td></tr>
+<tr><td>259</td><td>T</td><td>TTT</td><td>0.5986</td><td>0.1</td><td>0.0</td><td>155.0497</td><td>-0.0896</td><td>-0.0443</td><td>-0.4913</td><td>14.1010</td></tr>
+<tr><td>260</td><td>T</td><td>TTT</td><td>0.5986</td><td>0.1</td><td>0.0</td><td>155.6483</td><td>-0.0990</td><td>0.0139</td><td>-0.5809</td><td>14.0567</td></tr>
+<tr><td>261</td><td>T</td><td>TTC</td><td>0.5986</td><td>5.1</td><td>0.0</td><td>156.2470</td><td>-3.7726</td><td>3.4319</td><td>-0.6800</td><td>14.0706</td></tr>
+<tr><td>262</td><td>T</td><td>TCT</td><td>0.5986</td><td>6.5</td><td>0.0</td><td>156.8456</td><td>-1.5072</td><td>6.3228</td><td>-4.4525</td><td>17.5025</td></tr>
+<tr><td>263</td><td>C</td><td>CTG</td><td>0.5986</td><td>9.6</td><td>0.0</td><td>157.4443</td><td>3.4235</td><td>8.9688</td><td>-5.9597</td><td>23.8253</td></tr>
+<tr><td>264</td><td>T</td><td>TGT</td><td>0.5986</td><td>5.8</td><td>0.0</td><td>158.0429</td><td>4.7622</td><td>3.3108</td><td>-2.5362</td><td>32.7941</td></tr>
+<tr><td>265</td><td>G</td><td>GTC</td><td>0.5986</td><td>5.6</td><td>0.0</td><td>158.6416</td><td>5.5998</td><td>0.0496</td><td>2.2260</td><td>36.1049</td></tr>
+<tr><td>266</td><td>T</td><td>TCT</td><td>0.5986</td><td>6.5</td><td>0.0</td><td>159.2402</td><td>5.4019</td><td>-3.6152</td><td>7.8258</td><td>36.1545</td></tr>
+<tr><td>267</td><td>C</td><td>CTT</td><td>0.5986</td><td>4.2</td><td>0.0</td><td>159.8389</td><td>1.5671</td><td>-3.8967</td><td>13.2277</td><td>32.5393</td></tr>
+<tr><td>268</td><td>T</td><td>TTG</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>160.4375</td><td>-1.3305</td><td>-6.0555</td><td>14.7947</td><td>28.6426</td></tr>
+<tr><td>269</td><td>T</td><td>TGC</td><td>0.5986</td><td>7.5</td><td>0.0</td><td>161.0362</td><td>-5.4576</td><td>-5.1444</td><td>13.4642</td><td>22.5871</td></tr>
+<tr><td>270</td><td>G</td><td>GCC</td><td>0.5986</td><td>8.2</td><td>0.0</td><td>161.6348</td><td>-8.0989</td><td>-1.2839</td><td>8.0066</td><td>17.4427</td></tr>
+<tr><td>271</td><td>C</td><td>CCT</td><td>0.5986</td><td>4.7</td><td>0.0</td><td>162.2335</td><td>-4.2495</td><td>2.0080</td><td>-0.0923</td><td>16.1588</td></tr>
+<tr><td>272</td><td>C</td><td>CTG</td><td>0.5986</td><td>9.6</td><td>0.0</td><td>162.8321</td><td>-4.8591</td><td>8.2795</td><td>-4.3417</td><td>18.1668</td></tr>
+<tr><td>273</td><td>T</td><td>TGA</td><td>0.5986</td><td>10.0</td><td>0.0</td><td>163.4307</td><td>0.6788</td><td>9.9769</td><td>-9.2008</td><td>26.4463</td></tr>
+<tr><td>274</td><td>G</td><td>GAA</td><td>0.5986</td><td>5.1</td><td>0.0</td><td>164.0294</td><td>3.1533</td><td>4.0083</td><td>-8.5220</td><td>36.4232</td></tr>
+<tr><td>275</td><td>A</td><td>AAT</td><td>0.5986</td><td>0.0</td><td>0.0</td><td>164.6280</td><td>0.0000</td><td>0.0000</td><td>-5.3687</td><td>40.4315</td></tr>
+<tr><td>276</td><td>A</td><td>ATT</td><td>0.5986</td><td>0.0</td><td>0.0</td><td>165.2267</td><td>0.0000</td><td>0.0000</td><td>-5.3687</td><td>40.4315</td></tr>
+<tr><td>277</td><td>T</td><td>TTT</td><td>0.5986</td><td>0.1</td><td>0.0</td><td>165.8253</td><td>0.0628</td><td>-0.0778</td><td>-5.3687</td><td>40.4315</td></tr>
+<tr><td>278</td><td>T</td><td>TTA</td><td>0.5986</td><td>7.3</td><td>0.0</td><td>166.4240</td><td>0.5865</td><td>-7.2764</td><td>-5.3059</td><td>40.3537</td></tr>
+<tr><td>279</td><td>T</td><td>TAA</td><td>0.5986</td><td>7.3</td><td>0.0</td><td>167.0226</td><td>-3.6160</td><td>-6.3415</td><td>-4.7194</td><td>33.0773</td></tr>
+<tr><td>280</td><td>A</td><td>AAG</td><td>0.5986</td><td>4.2</td><td>0.0</td><td>167.6213</td><td>-3.7747</td><td>-1.8417</td><td>-8.3354</td><td>26.7358</td></tr>
+<tr><td>281</td><td>A</td><td>AGC</td><td>0.5986</td><td>6.3</td><td>0.0</td><td>168.2199</td><td>-6.2341</td><td>0.9086</td><td>-12.1100</td><td>24.8941</td></tr>
+<tr><td>282</td><td>G</td><td>GCG</td><td>0.5986</td><td>4.3</td><td>0.0</td><td>168.8186</td><td>-3.1656</td><td>2.9101</td><td>-18.3442</td><td>25.8027</td></tr>
+<tr><td>283</td><td>C</td><td>CGT</td><td>0.5986</td><td>5.2</td><td>0.0</td><td>169.4172</td><td>-1.1793</td><td>5.0645</td><td>-21.5098</td><td>28.7128</td></tr>
+<tr><td>284</td><td>G</td><td>GTT</td><td>0.5986</td><td>1.6</td><td>0.0</td><td>170.0159</td><td>0.5784</td><td>1.4918</td><td>-22.6891</td><td>33.7773</td></tr>
+<tr><td>285</td><td>T</td><td>TTA</td><td>0.5986</td><td>7.3</td><td>0.0</td><td>170.6145</td><td>6.0155</td><td>4.1356</td><td>-22.1107</td><td>35.2691</td></tr>
+<tr><td>286</td><td>T</td><td>TAA</td><td>0.5986</td><td>7.3</td><td>0.0</td><td>171.2132</td><td>7.3000</td><td>0.0265</td><td>-16.0952</td><td>39.4047</td></tr>
+<tr><td>287</td><td>A</td><td>AAC</td><td>0.5986</td><td>1.6</td><td>0.0</td><td>171.8118</td><td>1.3250</td><td>-0.8968</td><td>-8.7953</td><td>39.4313</td></tr>
+<tr><td>288</td><td>A</td><td>ACA</td><td>0.5986</td><td>5.8</td><td>0.0</td><td>172.4105</td><td>2.1359</td><td>-5.3924</td><td>-7.4702</td><td>38.5344</td></tr>
+<tr><td>289</td><td>C</td><td>CAG</td><td>0.5986</td><td>9.6</td><td>0.0</td><td>173.0091</td><td>-2.1092</td><td>-9.3654</td><td>-5.3343</td><td>33.1420</td></tr>
+<tr><td>290</td><td>A</td><td>AGG</td><td>0.5986</td><td>4.7</td><td>0.0</td><td>173.6078</td><td>-3.4369</td><td>-3.2059</td><td>-7.4435</td><td>23.7766</td></tr>
+<tr><td>291</td><td>G</td><td>GGA</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>174.2064</td><td>-6.1285</td><td>-0.9387</td><td>-10.8804</td><td>20.5707</td></tr>
+<tr><td>292</td><td>G</td><td>GAA</td><td>0.5986</td><td>5.1</td><td>0.0</td><td>174.8050</td><td>-4.5997</td><td>2.2030</td><td>-17.0089</td><td>19.6320</td></tr>
+<tr><td>293</td><td>A</td><td>AAA</td><td>0.5986</td><td>0.1</td><td>0.0</td><td>175.4037</td><td>-0.0502</td><td>0.0865</td><td>-21.6086</td><td>21.8349</td></tr>
+<tr><td>294</td><td>A</td><td>AAG</td><td>0.5986</td><td>4.2</td><td>0.0</td><td>176.0023</td><td>0.3070</td><td>4.1888</td><td>-21.6587</td><td>21.9214</td></tr>
+<tr><td>295</td><td>A</td><td>AGC</td><td>0.5986</td><td>6.3</td><td>0.0</td><td>176.6010</td><td>3.9211</td><td>4.9310</td><td>-21.3518</td><td>26.1102</td></tr>
+<tr><td>296</td><td>G</td><td>GCT</td><td>0.5986</td><td>6.3</td><td>0.0</td><td>177.1996</td><td>6.0180</td><td>1.8639</td><td>-17.4307</td><td>31.0412</td></tr>
+<tr><td>297</td><td>C</td><td>CTT</td><td>0.5986</td><td>4.2</td><td>0.0</td><td>177.7983</td><td>4.0145</td><td>-1.2344</td><td>-11.4127</td><td>32.9051</td></tr>
+<tr><td>298</td><td>T</td><td>TTT</td><td>0.5986</td><td>0.1</td><td>0.0</td><td>178.3969</td><td>0.0624</td><td>-0.0781</td><td>-7.3982</td><td>31.6707</td></tr>
+<tr><td>299</td><td>T</td><td>TTC</td><td>0.5986</td><td>5.1</td><td>0.0</td><td>178.9956</td><td>0.3832</td><td>-5.0856</td><td>-7.3358</td><td>31.5926</td></tr>
+<tr><td>300</td><td>T</td><td>TCC</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>179.5942</td><td>-3.0992</td><td>-5.3698</td><td>-6.9526</td><td>26.5070</td></tr>
+<tr><td>301</td><td>C</td><td>CCA</td><td>0.5986</td><td>0.7</td><td>0.0</td><td>180.1929</td><td>-0.6307</td><td>-0.3037</td><td>-10.0518</td><td>21.1372</td></tr>
+<tr><td>302</td><td>C</td><td>CAG</td><td>0.5986</td><td>9.6</td><td>0.0</td><td>180.7915</td><td>-9.4923</td><td>1.4341</td><td>-10.6825</td><td>20.8335</td></tr>
+<tr><td>303</td><td>A</td><td>AGG</td><td>0.5986</td><td>4.7</td><td>0.0</td><td>181.3902</td><td>-3.4434</td><td>3.1989</td><td>-20.1748</td><td>22.2676</td></tr>
+<tr><td>304</td><td>G</td><td>GGT</td><td>0.5986</td><td>5.2</td><td>0.0</td><td>181.9888</td><td>-1.1528</td><td>5.0706</td><td>-23.6182</td><td>25.4665</td></tr>
+<tr><td>305</td><td>G</td><td>GTT</td><td>0.5986</td><td>1.6</td><td>0.0</td><td>182.5875</td><td>0.5862</td><td>1.4888</td><td>-24.7711</td><td>30.5371</td></tr>
+<tr><td>306</td><td>T</td><td>TTG</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>183.1861</td><td>5.1274</td><td>3.4857</td><td>-24.1849</td><td>32.0258</td></tr>
+<tr><td>307</td><td>T</td><td>TGG</td><td>0.5986</td><td>0.7</td><td>0.0</td><td>183.7848</td><td>0.7000</td><td>-0.0011</td><td>-19.0575</td><td>35.5115</td></tr>
+<tr><td>308</td><td>G</td><td>GGG</td><td>0.5986</td><td>5.7</td><td>0.0</td><td>184.3834</td><td>4.7036</td><td>-3.2196</td><td>-18.3575</td><td>35.5104</td></tr>
+<tr><td>309</td><td>G</td><td>GGG</td><td>0.5986</td><td>5.7</td><td>0.0</td><td>184.9821</td><td>2.0714</td><td>-5.3103</td><td>-13.6539</td><td>32.2908</td></tr>
+<tr><td>310</td><td>G</td><td>GGA</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>185.5807</td><td>-1.3937</td><td>-6.0413</td><td>-11.5825</td><td>26.9805</td></tr>
+<tr><td>311</td><td>G</td><td>GAT</td><td>0.5986</td><td>3.6</td><td>0.0</td><td>186.1794</td><td>-2.6453</td><td>-2.4418</td><td>-12.9763</td><td>20.9392</td></tr>
+<tr><td>312</td><td>A</td><td>ATA</td><td>0.5986</td><td>9.7</td><td>0.0</td><td>186.7780</td><td>-9.5957</td><td>-1.4185</td><td>-15.6216</td><td>18.4974</td></tr>
+<tr><td>313</td><td>T</td><td>TAT</td><td>0.5986</td><td>9.7</td><td>0.0</td><td>187.3766</td><td>-8.7264</td><td>4.2356</td><td>-25.2173</td><td>17.0789</td></tr>
+<tr><td>314</td><td>A</td><td>ATT</td><td>0.5986</td><td>0.0</td><td>0.0</td><td>187.9753</td><td>0.0000</td><td>0.0000</td><td>-33.9437</td><td>21.3145</td></tr>
+<tr><td>315</td><td>T</td><td>TTA</td><td>0.5986</td><td>7.3</td><td>0.0</td><td>188.5739</td><td>0.5716</td><td>7.2776</td><td>-33.9437</td><td>21.3145</td></tr>
+<tr><td>316</td><td>T</td><td>TAA</td><td>0.5986</td><td>7.3</td><td>0.0</td><td>189.1726</td><td>4.5733</td><td>5.6899</td><td>-33.3721</td><td>28.5921</td></tr>
+<tr><td>317</td><td>A</td><td>AAG</td><td>0.5986</td><td>4.2</td><td>0.0</td><td>189.7712</td><td>4.0184</td><td>1.2216</td><td>-28.7988</td><td>34.2820</td></tr>
+<tr><td>318</td><td>A</td><td>AGA</td><td>0.5986</td><td>6.5</td><td>0.0</td><td>190.3699</td><td>6.2029</td><td>-1.9428</td><td>-24.7804</td><td>35.5036</td></tr>
+<tr><td>319</td><td>G</td><td>GAA</td><td>0.5986</td><td>5.1</td><td>0.0</td><td>190.9685</td><td>3.1615</td><td>-4.0018</td><td>-18.5775</td><td>33.5608</td></tr>
+<tr><td>320</td><td>A</td><td>AAT</td><td>0.5986</td><td>0.0</td><td>0.0</td><td>191.5672</td><td>0.0000</td><td>0.0000</td><td>-15.4160</td><td>29.5590</td></tr>
+<tr><td>321</td><td>A</td><td>ATA</td><td>0.5986</td><td>9.7</td><td>0.0</td><td>192.1658</td><td>-4.8926</td><td>-8.3757</td><td>-15.4160</td><td>29.5590</td></tr>
+<tr><td>322</td><td>T</td><td>TAA</td><td>0.5986</td><td>7.3</td><td>0.0</td><td>192.7645</td><td>-6.5938</td><td>-3.1323</td><td>-20.3085</td><td>21.1832</td></tr>
+<tr><td>323</td><td>A</td><td>AAA</td><td>0.5986</td><td>0.1</td><td>0.0</td><td>193.3631</td><td>-0.0988</td><td>0.0155</td><td>-26.9024</td><td>18.0509</td></tr>
+<tr><td>324</td><td>A</td><td>AAT</td><td>0.5986</td><td>0.0</td><td>0.0</td><td>193.9618</td><td>0.0000</td><td>0.0000</td><td>-27.0012</td><td>18.0664</td></tr>
+<tr><td>325</td><td>A</td><td>ATG</td><td>0.5986</td><td>8.7</td><td>0.0</td><td>194.5604</td><td>-1.8844</td><td>8.4935</td><td>-27.0012</td><td>18.0664</td></tr>
+<tr><td>326</td><td>T</td><td>TGA</td><td>0.5986</td><td>10.0</td><td>0.0</td><td>195.1591</td><td>3.7121</td><td>9.2855</td><td>-28.8856</td><td>26.5598</td></tr>
+<tr><td>327</td><td>G</td><td>GAG</td><td>0.5986</td><td>6.6</td><td>0.0</td><td>195.7577</td><td>5.4775</td><td>3.6820</td><td>-25.1734</td><td>35.8453</td></tr>
+<tr><td>328</td><td>A</td><td>AGT</td><td>0.5986</td><td>2.0</td><td>0.0</td><td>196.3564</td><td>2.0000</td><td>-0.0136</td><td>-19.6960</td><td>39.5273</td></tr>
+<tr><td>329</td><td>G</td><td>GTT</td><td>0.5986</td><td>1.6</td><td>0.0</td><td>196.9550</td><td>1.3156</td><td>-0.9106</td><td>-17.6960</td><td>39.5137</td></tr>
+<tr><td>330</td><td>T</td><td>TTG</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>197.5537</td><td>2.2228</td><td>-5.7878</td><td>-16.3804</td><td>38.6031</td></tr>
+<tr><td>331</td><td>T</td><td>TGA</td><td>0.5986</td><td>10.0</td><td>0.0</td><td>198.1523</td><td>-2.2989</td><td>-9.7322</td><td>-14.1576</td><td>32.8152</td></tr>
+<tr><td>332</td><td>G</td><td>GAG</td><td>0.5986</td><td>6.6</td><td>0.0</td><td>198.7509</td><td>-4.8731</td><td>-4.4512</td><td>-16.4564</td><td>23.0831</td></tr>
+<tr><td>333</td><td>A</td><td>AGG</td><td>0.5986</td><td>4.7</td><td>0.0</td><td>199.3496</td><td>-4.6530</td><td>-0.6630</td><td>-21.3295</td><td>18.6319</td></tr>
+<tr><td>334</td><td>G</td><td>GGA</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>199.9482</td><td>-5.5635</td><td>2.7364</td><td>-25.9825</td><td>17.9688</td></tr>
+<tr><td>335</td><td>G</td><td>GAA</td><td>0.5986</td><td>5.1</td><td>0.0</td><td>200.5469</td><td>-2.5121</td><td>4.4384</td><td>-31.5460</td><td>20.7052</td></tr>
+<tr><td>336</td><td>A</td><td>AAG</td><td>0.5986</td><td>4.2</td><td>0.0</td><td>201.1455</td><td>0.3507</td><td>4.1853</td><td>-34.0581</td><td>25.1436</td></tr>
+<tr><td>337</td><td>A</td><td>AGT</td><td>0.5986</td><td>2.0</td><td>0.0</td><td>201.7442</td><td>1.2611</td><td>1.5523</td><td>-33.7073</td><td>29.3290</td></tr>
+<tr><td>338</td><td>G</td><td>GTT</td><td>0.5986</td><td>1.6</td><td>0.0</td><td>202.3428</td><td>1.5332</td><td>0.4574</td><td>-32.4463</td><td>30.8813</td></tr>
+<tr><td>339</td><td>T</td><td>TTT</td><td>0.5986</td><td>0.1</td><td>0.0</td><td>202.9415</td><td>0.0953</td><td>-0.0304</td><td>-30.9130</td><td>31.3386</td></tr>
+<tr><td>340</td><td>T</td><td>TTG</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>203.5401</td><td>3.8179</td><td>-4.8850</td><td>-30.8177</td><td>31.3082</td></tr>
+<tr><td>341</td><td>T</td><td>TGG</td><td>0.5986</td><td>0.7</td><td>0.0</td><td>204.1388</td><td>0.0453</td><td>-0.6985</td><td>-26.9998</td><td>26.4232</td></tr>
+<tr><td>342</td><td>G</td><td>GGG</td><td>0.5986</td><td>5.7</td><td>0.0</td><td>204.7374</td><td>-2.9007</td><td>-4.9067</td><td>-26.9545</td><td>25.7247</td></tr>
+<tr><td>343</td><td>G</td><td>GGT</td><td>0.5986</td><td>5.2</td><td>0.0</td><td>205.3361</td><td>-4.7086</td><td>-2.2067</td><td>-29.8552</td><td>20.8180</td></tr>
+<tr><td>344</td><td>G</td><td>GTT</td><td>0.5986</td><td>1.6</td><td>0.0</td><td>205.9347</td><td>-1.5795</td><td>0.2555</td><td>-34.5638</td><td>18.6113</td></tr>
+<tr><td>345</td><td>T</td><td>TTA</td><td>0.5986</td><td>7.3</td><td>0.0</td><td>206.5334</td><td>-5.2961</td><td>5.0241</td><td>-36.1432</td><td>18.8668</td></tr>
+<tr><td>346</td><td>T</td><td>TAG</td><td>0.5986</td><td>7.8</td><td>0.0</td><td>207.1320</td><td>-1.6497</td><td>7.6236</td><td>-41.4393</td><td>23.8909</td></tr>
+<tr><td>347</td><td>A</td><td>AGC</td><td>0.5986</td><td>6.3</td><td>0.0</td><td>207.7307</td><td>2.3692</td><td>5.8375</td><td>-43.0890</td><td>31.5145</td></tr>
+<tr><td>348</td><td>G</td><td>GCA</td><td>0.5986</td><td>7.5</td><td>0.0</td><td>208.3293</td><td>6.2462</td><td>4.1515</td><td>-40.7198</td><td>37.3520</td></tr>
+<tr><td>349</td><td>C</td><td>CAT</td><td>0.5986</td><td>8.7</td><td>0.0</td><td>208.9280</td><td>8.6994</td><td>-0.1048</td><td>-34.4736</td><td>41.5036</td></tr>
+<tr><td>350</td><td>A</td><td>ATA</td><td>0.5986</td><td>9.7</td><td>0.0</td><td>209.5266</td><td>7.9468</td><td>-5.5623</td><td>-25.7743</td><td>41.3988</td></tr>
+<tr><td>351</td><td>T</td><td>TAC</td><td>0.5986</td><td>6.4</td><td>0.0</td><td>210.1252</td><td>2.2633</td><td>-5.9864</td><td>-17.8275</td><td>35.8365</td></tr>
+<tr><td>352</td><td>A</td><td>ACA</td><td>0.5986</td><td>5.8</td><td>0.0</td><td>210.7239</td><td>-1.3628</td><td>-5.6376</td><td>-15.5642</td><td>29.8501</td></tr>
+<tr><td>353</td><td>C</td><td>CAT</td><td>0.5986</td><td>8.7</td><td>0.0</td><td>211.3225</td><td>-6.4541</td><td>-5.8339</td><td>-16.9270</td><td>24.2125</td></tr>
+<tr><td>354</td><td>A</td><td>ATT</td><td>0.5986</td><td>0.0</td><td>0.0</td><td>211.9212</td><td>0.0000</td><td>0.0000</td><td>-23.3812</td><td>18.3786</td></tr>
+<tr><td>355</td><td>T</td><td>TTC</td><td>0.5986</td><td>5.1</td><td>0.0</td><td>212.5198</td><td>-4.5646</td><td>2.2748</td><td>-23.3812</td><td>18.3786</td></tr>
+<tr><td>356</td><td>T</td><td>TCA</td><td>0.5986</td><td>10.0</td><td>0.0</td><td>213.1185</td><td>-4.8802</td><td>8.7283</td><td>-27.9458</td><td>20.6534</td></tr>
+<tr><td>357</td><td>C</td><td>CAC</td><td>0.5986</td><td>6.8</td><td>0.0</td><td>213.7171</td><td>0.6033</td><td>6.7732</td><td>-32.8259</td><td>29.3817</td></tr>
+<tr><td>358</td><td>A</td><td>ACT</td><td>0.5986</td><td>2.0</td><td>0.0</td><td>214.3158</td><td>1.2692</td><td>1.5457</td><td>-32.2227</td><td>36.1549</td></tr>
+<tr><td>359</td><td>C</td><td>CTT</td><td>0.5986</td><td>4.2</td><td>0.0</td><td>214.9144</td><td>4.0310</td><td>1.1795</td><td>-30.9535</td><td>37.7006</td></tr>
+<tr><td>360</td><td>T</td><td>TTA</td><td>0.5986</td><td>7.3</td><td>0.0</td><td>215.5131</td><td>6.9431</td><td>-2.2546</td><td>-26.9225</td><td>38.8801</td></tr>
+<tr><td>361</td><td>T</td><td>TAT</td><td>0.5986</td><td>9.7</td><td>0.0</td><td>216.1117</td><td>5.9332</td><td>-7.6738</td><td>-19.9794</td><td>36.6256</td></tr>
+<tr><td>362</td><td>A</td><td>ATC</td><td>0.5986</td><td>3.6</td><td>0.0</td><td>216.7104</td><td>0.2142</td><td>-3.5936</td><td>-14.0462</td><td>28.9518</td></tr>
+<tr><td>363</td><td>T</td><td>TCA</td><td>0.5986</td><td>10.0</td><td>0.0</td><td>217.3090</td><td>-5.1338</td><td>-8.5816</td><td>-13.8320</td><td>25.3582</td></tr>
+<tr><td>364</td><td>C</td><td>CAT</td><td>0.5986</td><td>8.7</td><td>0.0</td><td>217.9077</td><td>-7.8970</td><td>-3.6507</td><td>-18.9659</td><td>16.7766</td></tr>
+<tr><td>365</td><td>A</td><td>ATA</td><td>0.5986</td><td>9.7</td><td>0.0</td><td>218.5063</td><td>-9.5673</td><td>1.5992</td><td>-26.8629</td><td>13.1259</td></tr>
+<tr><td>366</td><td>T</td><td>TAT</td><td>0.5986</td><td>9.7</td><td>0.0</td><td>219.1050</td><td>-7.0023</td><td>6.7125</td><td>-36.4301</td><td>14.7251</td></tr>
+<tr><td>367</td><td>A</td><td>ATC</td><td>0.5986</td><td>3.6</td><td>0.0</td><td>219.7036</td><td>-0.7430</td><td>3.5225</td><td>-43.4324</td><td>21.4376</td></tr>
+<tr><td>368</td><td>T</td><td>TCA</td><td>0.5986</td><td>10.0</td><td>0.0</td><td>220.3023</td><td>3.8090</td><td>9.2462</td><td>-44.1754</td><td>24.9601</td></tr>
+<tr><td>369</td><td>C</td><td>CAT</td><td>0.5986</td><td>8.7</td><td>0.0</td><td>220.9009</td><td>7.2706</td><td>4.7779</td><td>-40.3664</td><td>34.2062</td></tr>
+<tr><td>370</td><td>A</td><td>ATC</td><td>0.5986</td><td>3.6</td><td>0.0</td><td>221.4995</td><td>3.5995</td><td>-0.0622</td><td>-33.0958</td><td>38.9841</td></tr>
+<tr><td>371</td><td>T</td><td>TCC</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>222.0982</td><td>5.0607</td><td>-3.5818</td><td>-29.4963</td><td>38.9219</td></tr>
+<tr><td>372</td><td>C</td><td>CCT</td><td>0.5986</td><td>4.7</td><td>0.0</td><td>222.6968</td><td>1.6391</td><td>-4.4049</td><td>-24.4356</td><td>35.3402</td></tr>
+<tr><td>373</td><td>C</td><td>CTT</td><td>0.5986</td><td>4.2</td><td>0.0</td><td>223.2955</td><td>-1.0082</td><td>-4.0772</td><td>-22.7965</td><td>30.9353</td></tr>
+<tr><td>374</td><td>T</td><td>TTC</td><td>0.5986</td><td>5.1</td><td>0.0</td><td>223.8941</td><td>-3.8013</td><td>-3.4000</td><td>-23.8047</td><td>26.8581</td></tr>
+<tr><td>375</td><td>T</td><td>TCC</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>224.4928</td><td>-6.1468</td><td>-0.8104</td><td>-27.6060</td><td>23.4580</td></tr>
+<tr><td>376</td><td>C</td><td>CCC</td><td>0.5986</td><td>5.7</td><td>0.0</td><td>225.0914</td><td>-5.0882</td><td>2.5690</td><td>-33.7528</td><td>22.6476</td></tr>
+<tr><td>377</td><td>C</td><td>CCT</td><td>0.5986</td><td>4.7</td><td>0.0</td><td>225.6901</td><td>-2.2722</td><td>4.1143</td><td>-38.8410</td><td>25.2166</td></tr>
+<tr><td>378</td><td>C</td><td>CTG</td><td>0.5986</td><td>9.6</td><td>0.0</td><td>226.2887</td><td>0.9016</td><td>9.5576</td><td>-41.1132</td><td>29.3309</td></tr>
+<tr><td>379</td><td>T</td><td>TGG</td><td>0.5986</td><td>0.7</td><td>0.0</td><td>226.8874</td><td>0.4470</td><td>0.5387</td><td>-40.2116</td><td>38.8885</td></tr>
+<tr><td>380</td><td>G</td><td>GGA</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>227.4860</td><td>5.9595</td><td>1.7101</td><td>-39.7646</td><td>39.4271</td></tr>
+<tr><td>381</td><td>G</td><td>GAT</td><td>0.5986</td><td>3.6</td><td>0.0</td><td>228.0847</td><td>3.4181</td><td>-1.1297</td><td>-33.8051</td><td>41.1372</td></tr>
+<tr><td>382</td><td>A</td><td>ATC</td><td>0.5986</td><td>3.6</td><td>0.0</td><td>228.6833</td><td>2.1871</td><td>-2.8595</td><td>-30.3869</td><td>40.0075</td></tr>
+<tr><td>383</td><td>T</td><td>TCA</td><td>0.5986</td><td>10.0</td><td>0.0</td><td>229.2820</td><td>0.5427</td><td>-9.9853</td><td>-28.1998</td><td>37.1480</td></tr>
+<tr><td>384</td><td>C</td><td>CAA</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>229.8806</td><td>-3.2107</td><td>-5.3039</td><td>-27.6571</td><td>27.1628</td></tr>
+<tr><td>385</td><td>A</td><td>AAT</td><td>0.5986</td><td>0.0</td><td>0.0</td><td>230.4793</td><td>0.0000</td><td>0.0000</td><td>-30.8678</td><td>21.8589</td></tr>
+<tr><td>386</td><td>A</td><td>ATA</td><td>0.5986</td><td>9.7</td><td>0.0</td><td>231.0779</td><td>-9.5588</td><td>1.6492</td><td>-30.8678</td><td>21.8589</td></tr>
+<tr><td>387</td><td>T</td><td>TAT</td><td>0.5986</td><td>9.7</td><td>0.0</td><td>231.6766</td><td>-6.9671</td><td>6.7490</td><td>-40.4266</td><td>23.5081</td></tr>
+<tr><td>388</td><td>A</td><td>ATG</td><td>0.5986</td><td>8.7</td><td>0.0</td><td>232.2752</td><td>-1.7510</td><td>8.5220</td><td>-47.3938</td><td>30.2570</td></tr>
+<tr><td>389</td><td>T</td><td>TGC</td><td>0.5986</td><td>7.5</td><td>0.0</td><td>232.8738</td><td>2.8929</td><td>6.9196</td><td>-49.1448</td><td>38.7790</td></tr>
+<tr><td>390</td><td>G</td><td>GCA</td><td>0.5986</td><td>7.5</td><td>0.0</td><td>233.4725</td><td>6.2892</td><td>4.0860</td><td>-46.2519</td><td>45.6986</td></tr>
+<tr><td>391</td><td>C</td><td>CAA</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>234.0711</td><td>6.1984</td><td>-0.1394</td><td>-39.9627</td><td>49.7846</td></tr>
+<tr><td>392</td><td>A</td><td>AAT</td><td>0.5986</td><td>0.0</td><td>0.0</td><td>234.6698</td><td>0.0000</td><td>0.0000</td><td>-33.7642</td><td>49.6452</td></tr>
+<tr><td>393</td><td>A</td><td>ATG</td><td>0.5986</td><td>8.7</td><td>0.0</td><td>235.2684</td><td>2.9915</td><td>-8.1695</td><td>-33.7642</td><td>49.6452</td></tr>
+<tr><td>394</td><td>T</td><td>TGA</td><td>0.5986</td><td>10.0</td><td>0.0</td><td>235.8671</td><td>-2.4511</td><td>-9.6949</td><td>-30.7728</td><td>41.4757</td></tr>
+<tr><td>395</td><td>G</td><td>GAG</td><td>0.5986</td><td>6.6</td><td>0.0</td><td>236.4657</td><td>-4.9422</td><td>-4.3743</td><td>-33.2239</td><td>31.7807</td></tr>
+<tr><td>396</td><td>A</td><td>AGT</td><td>0.5986</td><td>2.0</td><td>0.0</td><td>237.0644</td><td>-1.9842</td><td>-0.2511</td><td>-38.1661</td><td>27.4065</td></tr>
+<tr><td>397</td><td>G</td><td>GTG</td><td>0.5986</td><td>6.8</td><td>0.0</td><td>237.6630</td><td>-6.0541</td><td>3.0965</td><td>-40.1503</td><td>27.1554</td></tr>
+<tr><td>398</td><td>T</td><td>TGG</td><td>0.5986</td><td>0.7</td><td>0.0</td><td>238.2617</td><td>-0.3352</td><td>0.6145</td><td>-46.2044</td><td>30.2519</td></tr>
+<tr><td>399</td><td>G</td><td>GGG</td><td>0.5986</td><td>5.7</td><td>0.0</td><td>238.8603</td><td>0.5650</td><td>5.6719</td><td>-46.5396</td><td>30.8664</td></tr>
+<tr><td>400</td><td>G</td><td>GGA</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>239.4590</td><td>3.9843</td><td>4.7503</td><td>-45.9746</td><td>36.5383</td></tr>
+<tr><td>401</td><td>G</td><td>GAC</td><td>0.5986</td><td>5.6</td><td>0.0</td><td>240.0576</td><td>5.3908</td><td>1.5165</td><td>-41.9903</td><td>41.2886</td></tr>
+<tr><td>402</td><td>A</td><td>ACA</td><td>0.5986</td><td>5.8</td><td>0.0</td><td>240.6563</td><td>5.4974</td><td>-1.8488</td><td>-36.5995</td><td>42.8051</td></tr>
+<tr><td>403</td><td>C</td><td>CAA</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>241.2549</td><td>3.7409</td><td>-4.9443</td><td>-31.1021</td><td>40.9562</td></tr>
+<tr><td>404</td><td>A</td><td>AAA</td><td>0.5986</td><td>0.1</td><td>0.0</td><td>241.8536</td><td>0.0049</td><td>-0.0999</td><td>-27.3612</td><td>36.0120</td></tr>
+<tr><td>405</td><td>A</td><td>AAA</td><td>0.5986</td><td>0.1</td><td>0.0</td><td>242.4522</td><td>-0.0522</td><td>-0.0853</td><td>-27.3563</td><td>35.9121</td></tr>
+<tr><td>406</td><td>A</td><td>AAC</td><td>0.5986</td><td>1.6</td><td>0.0</td><td>243.0509</td><td>-1.4593</td><td>-0.6562</td><td>-27.4085</td><td>35.8268</td></tr>
+<tr><td>407</td><td>A</td><td>ACC</td><td>0.5986</td><td>5.2</td><td>0.0</td><td>243.6495</td><td>-5.1196</td><td>0.9109</td><td>-28.8678</td><td>35.1706</td></tr>
+<tr><td>408</td><td>C</td><td>CCC</td><td>0.5986</td><td>5.7</td><td>0.0</td><td>244.2482</td><td>-4.0733</td><td>3.9872</td><td>-33.9874</td><td>36.0815</td></tr>
+<tr><td>409</td><td>C</td><td>CCT</td><td>0.5986</td><td>4.7</td><td>0.0</td><td>244.8468</td><td>-0.9219</td><td>4.6087</td><td>-38.0607</td><td>40.0687</td></tr>
+<tr><td>410</td><td>C</td><td>CTC</td><td>0.5986</td><td>6.6</td><td>0.0</td><td>245.4454</td><td>2.5776</td><td>6.0759</td><td>-38.9826</td><td>44.6774</td></tr>
+<tr><td>411</td><td>T</td><td>TCA</td><td>0.5986</td><td>10.0</td><td>0.0</td><td>246.0441</td><td>8.4140</td><td>5.4042</td><td>-36.4050</td><td>50.7533</td></tr>
+<tr><td>412</td><td>C</td><td>CAA</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>246.6427</td><td>6.1976</td><td>-0.1718</td><td>-27.9910</td><td>56.1574</td></tr>
+<tr><td>413</td><td>A</td><td>AAC</td><td>0.5986</td><td>1.6</td><td>0.0</td><td>247.2414</td><td>1.2963</td><td>-0.9379</td><td>-21.7934</td><td>55.9856</td></tr>
+<tr><td>414</td><td>A</td><td>ACT</td><td>0.5986</td><td>2.0</td><td>0.0</td><td>247.8400</td><td>0.6779</td><td>-1.8816</td><td>-20.4972</td><td>55.0477</td></tr>
+<tr><td>415</td><td>C</td><td>CTC</td><td>0.5986</td><td>6.6</td><td>0.0</td><td>248.4387</td><td>-1.6512</td><td>-6.3901</td><td>-19.8193</td><td>53.1661</td></tr>
+<tr><td>416</td><td>T</td><td>TCC</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>249.0373</td><td>-4.6641</td><td>-4.0849</td><td>-21.4705</td><td>46.7760</td></tr>
+<tr><td>417</td><td>C</td><td>CCT</td><td>0.5986</td><td>4.7</td><td>0.0</td><td>249.6360</td><td>-4.6658</td><td>-0.5656</td><td>-26.1346</td><td>42.6911</td></tr>
+<tr><td>418</td><td>C</td><td>CTG</td><td>0.5986</td><td>9.6</td><td>0.0</td><td>250.2346</td><td>-8.5240</td><td>4.4161</td><td>-30.8004</td><td>42.1255</td></tr>
+<tr><td>419</td><td>T</td><td>TGG</td><td>0.5986</td><td>0.7</td><td>0.0</td><td>250.8333</td><td>-0.3320</td><td>0.6163</td><td>-39.3244</td><td>46.5416</td></tr>
+<tr><td>420</td><td>G</td><td>GGC</td><td>0.5986</td><td>8.2</td><td>0.0</td><td>251.4319</td><td>0.8554</td><td>8.1553</td><td>-39.6564</td><td>47.1579</td></tr>
+<tr><td>421</td><td>G</td><td>GCT</td><td>0.5986</td><td>6.3</td><td>0.0</td><td>252.0306</td><td>4.0738</td><td>4.8057</td><td>-38.8010</td><td>55.3131</td></tr>
+<tr><td>422</td><td>C</td><td>CTT</td><td>0.5986</td><td>4.2</td><td>0.0</td><td>252.6292</td><td>4.0490</td><td>1.1162</td><td>-34.7272</td><td>60.1188</td></tr>
+<tr><td>423</td><td>T</td><td>TTC</td><td>0.5986</td><td>5.1</td><td>0.0</td><td>253.2279</td><td>4.8254</td><td>-1.6509</td><td>-30.6783</td><td>61.2350</td></tr>
+<tr><td>424</td><td>T</td><td>TCC</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>253.8265</td><td>3.7150</td><td>-4.9637</td><td>-25.8529</td><td>59.5840</td></tr>
+<tr><td>425</td><td>C</td><td>CCC</td><td>0.5986</td><td>5.7</td><td>0.0</td><td>254.4252</td><td>0.2499</td><td>-5.6945</td><td>-22.1379</td><td>54.6203</td></tr>
+<tr><td>426</td><td>C</td><td>CCC</td><td>0.5986</td><td>5.7</td><td>0.0</td><td>255.0238</td><td>-3.0026</td><td>-4.8450</td><td>-21.8880</td><td>48.9258</td></tr>
+<tr><td>427</td><td>C</td><td>CCT</td><td>0.5986</td><td>4.7</td><td>0.0</td><td>255.6225</td><td>-4.2966</td><td>-1.9051</td><td>-24.8906</td><td>44.0808</td></tr>
+<tr><td>428</td><td>C</td><td>CTT</td><td>0.5986</td><td>4.2</td><td>0.0</td><td>256.2211</td><td>-4.1312</td><td>0.7573</td><td>-29.1872</td><td>42.1757</td></tr>
+<tr><td>429</td><td>T</td><td>TTG</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>256.8197</td><td>-4.4079</td><td>4.3601</td><td>-33.3184</td><td>42.9329</td></tr>
+<tr><td>430</td><td>T</td><td>TGG</td><td>0.5986</td><td>0.7</td><td>0.0</td><td>257.4184</td><td>-0.1337</td><td>0.6871</td><td>-37.7263</td><td>47.2930</td></tr>
+<tr><td>431</td><td>G</td><td>GGA</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>258.0170</td><td>2.4511</td><td>5.6949</td><td>-37.8600</td><td>47.9802</td></tr>
+<tr><td>432</td><td>G</td><td>GAG</td><td>0.5986</td><td>6.6</td><td>0.0</td><td>258.6157</td><td>5.5718</td><td>3.5377</td><td>-35.4088</td><td>53.6751</td></tr>
+<tr><td>433</td><td>A</td><td>AGA</td><td>0.5986</td><td>6.5</td><td>0.0</td><td>259.2143</td><td>6.4965</td><td>-0.2141</td><td>-29.8370</td><td>57.2127</td></tr>
+<tr><td>434</td><td>G</td><td>GAA</td><td>0.5986</td><td>5.1</td><td>0.0</td><td>259.8130</td><td>4.1162</td><td>-3.0112</td><td>-23.3406</td><td>56.9986</td></tr>
+<tr><td>435</td><td>A</td><td>AAG</td><td>0.5986</td><td>4.2</td><td>0.0</td><td>260.4116</td><td>1.4029</td><td>-3.9588</td><td>-19.2244</td><td>53.9875</td></tr>
+<tr><td>436</td><td>A</td><td>AGG</td><td>0.5986</td><td>4.7</td><td>0.0</td><td>261.0103</td><td>-1.1996</td><td>-4.5443</td><td>-17.8215</td><td>50.0287</td></tr>
+<tr><td>437</td><td>G</td><td>GGA</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>261.6089</td><td>-4.6854</td><td>-4.0604</td><td>-19.0211</td><td>45.4843</td></tr>
+<tr><td>438</td><td>G</td><td>GAA</td><td>0.5986</td><td>5.1</td><td>0.0</td><td>262.2076</td><td>-5.0661</td><td>-0.5873</td><td>-23.7065</td><td>41.4239</td></tr>
+<tr><td>439</td><td>A</td><td>AAA</td><td>0.5986</td><td>0.1</td><td>0.0</td><td>262.8062</td><td>-0.0885</td><td>0.0465</td><td>-28.7726</td><td>40.8366</td></tr>
+<tr><td>440</td><td>A</td><td>AAA</td><td>0.5986</td><td>0.1</td><td>0.0</td><td>263.4049</td><td>-0.0470</td><td>0.0883</td><td>-28.8612</td><td>40.8831</td></tr>
+<tr><td>441</td><td>A</td><td>AAA</td><td>0.5986</td><td>0.1</td><td>0.0</td><td>264.0035</td><td>0.0110</td><td>0.0994</td><td>-28.9081</td><td>40.9714</td></tr>
+<tr><td>442</td><td>A</td><td>AAG</td><td>0.5986</td><td>4.2</td><td>0.0</td><td>264.6022</td><td>2.7325</td><td>3.1896</td><td>-28.8972</td><td>41.0708</td></tr>
+<tr><td>443</td><td>A</td><td>AGC</td><td>0.5986</td><td>6.3</td><td>0.0</td><td>265.2008</td><td>6.0821</td><td>1.6425</td><td>-26.1646</td><td>44.2603</td></tr>
+<tr><td>444</td><td>G</td><td>GCT</td><td>0.5986</td><td>6.3</td><td>0.0</td><td>265.7995</td><td>5.9500</td><td>-2.0705</td><td>-20.0825</td><td>45.9028</td></tr>
+<tr><td>445</td><td>C</td><td>CTG</td><td>0.5986</td><td>9.6</td><td>0.0</td><td>266.3981</td><td>5.7120</td><td>-7.7157</td><td>-14.1325</td><td>43.8323</td></tr>
+<tr><td>446</td><td>T</td><td>TGG</td><td>0.5986</td><td>0.7</td><td>0.0</td><td>266.9968</td><td>0.0270</td><td>-0.6995</td><td>-8.4204</td><td>36.1166</td></tr>
+<tr><td>447</td><td>G</td><td>GGA</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>267.5954</td><td>-3.2935</td><td>-5.2529</td><td>-8.3934</td><td>35.4171</td></tr>
+<tr><td>448</td><td>G</td><td>GAG</td><td>0.5986</td><td>6.6</td><td>0.0</td><td>268.1940</td><td>-6.0474</td><td>-2.6437</td><td>-11.6869</td><td>30.1642</td></tr>
+<tr><td>449</td><td>A</td><td>AGT</td><td>0.5986</td><td>2.0</td><td>0.0</td><td>268.7927</td><td>-1.9653</td><td>0.3709</td><td>-17.7343</td><td>27.5205</td></tr>
+<tr><td>450</td><td>G</td><td>GTG</td><td>0.5986</td><td>6.8</td><td>0.0</td><td>269.3913</td><td>-4.8094</td><td>4.8072</td><td>-19.6996</td><td>27.8914</td></tr>
+<tr><td>451</td><td>T</td><td>TGT</td><td>0.5986</td><td>5.8</td><td>0.0</td><td>269.9900</td><td>-1.0782</td><td>5.6989</td><td>-24.5090</td><td>32.6986</td></tr>
+<tr><td>452</td><td>G</td><td>GTG</td><td>0.5986</td><td>6.8</td><td>0.0</td><td>270.5886</td><td>2.7209</td><td>6.2319</td><td>-25.5872</td><td>38.3976</td></tr>
+<tr><td>453</td><td>T</td><td>TGC</td><td>0.5986</td><td>7.5</td><td>0.0</td><td>271.1873</td><td>6.3525</td><td>3.9869</td><td>-22.8662</td><td>44.6294</td></tr>
+<tr><td>454</td><td>G</td><td>GCA</td><td>0.5986</td><td>7.5</td><td>0.0</td><td>271.7859</td><td>7.4945</td><td>-0.2862</td><td>-16.5137</td><td>48.6164</td></tr>
+<tr><td>455</td><td>C</td><td>CAT</td><td>0.5986</td><td>8.7</td><td>0.0</td><td>272.3846</td><td>6.9947</td><td>-5.1733</td><td>-9.0192</td><td>48.3302</td></tr>
+<tr><td>456</td><td>A</td><td>ATC</td><td>0.5986</td><td>3.6</td><td>0.0</td><td>272.9832</td><td>1.1847</td><td>-3.3995</td><td>-2.0245</td><td>43.1568</td></tr>
+<tr><td>457</td><td>T</td><td>TCC</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>273.5819</td><td>-1.6137</td><td>-5.9863</td><td>-0.8398</td><td>39.7574</td></tr>
+<tr><td>458</td><td>C</td><td>CCA</td><td>0.5986</td><td>0.7</td><td>0.0</td><td>274.1805</td><td>-0.5314</td><td>-0.4557</td><td>-2.4535</td><td>33.7711</td></tr>
+<tr><td>459</td><td>C</td><td>CAG</td><td>0.5986</td><td>9.6</td><td>0.0</td><td>274.7792</td><td>-9.5418</td><td>-1.0557</td><td>-2.9849</td><td>33.3154</td></tr>
+<tr><td>460</td><td>A</td><td>AGA</td><td>0.5986</td><td>6.5</td><td>0.0</td><td>275.3778</td><td>-5.7399</td><td>3.0502</td><td>-12.5267</td><td>32.2597</td></tr>
+<tr><td>461</td><td>G</td><td>GAA</td><td>0.5986</td><td>5.1</td><td>0.0</td><td>275.9765</td><td>-2.3717</td><td>4.5150</td><td>-18.2665</td><td>35.3100</td></tr>
+<tr><td>462</td><td>A</td><td>AAT</td><td>0.5986</td><td>0.0</td><td>0.0</td><td>276.5751</td><td>0.0000</td><td>0.0000</td><td>-20.6383</td><td>39.8249</td></tr>
+<tr><td>463</td><td>A</td><td>ATT</td><td>0.5986</td><td>0.0</td><td>0.0</td><td>277.1738</td><td>0.0000</td><td>0.0000</td><td>-20.6383</td><td>39.8249</td></tr>
+<tr><td>464</td><td>T</td><td>TTT</td><td>0.5986</td><td>0.1</td><td>0.0</td><td>277.7724</td><td>0.0967</td><td>0.0256</td><td>-20.6383</td><td>39.8249</td></tr>
+<tr><td>465</td><td>T</td><td>TTC</td><td>0.5986</td><td>5.1</td><td>0.0</td><td>278.3711</td><td>4.8079</td><td>-1.7013</td><td>-20.5416</td><td>39.8505</td></tr>
+<tr><td>466</td><td>T</td><td>TCA</td><td>0.5986</td><td>10.0</td><td>0.0</td><td>278.9697</td><td>5.9080</td><td>-8.0682</td><td>-15.7337</td><td>38.1492</td></tr>
+<tr><td>467</td><td>C</td><td>CAA</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>279.5683</td><td>0.2070</td><td>-6.1965</td><td>-9.8258</td><td>30.0810</td></tr>
+<tr><td>468</td><td>A</td><td>AAC</td><td>0.5986</td><td>1.6</td><td>0.0</td><td>280.1670</td><td>-0.8570</td><td>-1.3511</td><td>-9.6188</td><td>23.8844</td></tr>
+<tr><td>469</td><td>A</td><td>ACT</td><td>0.5986</td><td>2.0</td><td>0.0</td><td>280.7656</td><td>-1.8367</td><td>-0.7915</td><td>-10.4758</td><td>22.5333</td></tr>
+<tr><td>470</td><td>C</td><td>CTT</td><td>0.5986</td><td>4.2</td><td>0.0</td><td>281.3643</td><td>-4.1230</td><td>0.8004</td><td>-12.3125</td><td>21.7418</td></tr>
+<tr><td>471</td><td>T</td><td>TTT</td><td>0.5986</td><td>0.1</td><td>0.0</td><td>281.9629</td><td>-0.0704</td><td>0.0711</td><td>-16.4355</td><td>22.5422</td></tr>
+<tr><td>472</td><td>T</td><td>TTT</td><td>0.5986</td><td>0.1</td><td>0.0</td><td>282.5616</td><td>-0.0181</td><td>0.0984</td><td>-16.5058</td><td>22.6133</td></tr>
+<tr><td>473</td><td>T</td><td>TTC</td><td>0.5986</td><td>5.1</td><td>0.0</td><td>283.1602</td><td>2.0651</td><td>4.6632</td><td>-16.5239</td><td>22.7116</td></tr>
+<tr><td>474</td><td>T</td><td>TCC</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>283.7589</td><td>5.2686</td><td>3.2684</td><td>-14.4588</td><td>27.3748</td></tr>
+<tr><td>475</td><td>C</td><td>CCC</td><td>0.5986</td><td>5.7</td><td>0.0</td><td>284.3575</td><td>5.6946</td><td>-0.2473</td><td>-9.1903</td><td>30.6432</td></tr>
+<tr><td>476</td><td>C</td><td>CCA</td><td>0.5986</td><td>0.7</td><td>0.0</td><td>284.9562</td><td>0.5606</td><td>-0.4192</td><td>-3.4956</td><td>30.3959</td></tr>
+<tr><td>477</td><td>C</td><td>CAG</td><td>0.5986</td><td>9.6</td><td>0.0</td><td>285.5548</td><td>3.1118</td><td>-9.0817</td><td>-2.9350</td><td>29.9768</td></tr>
+<tr><td>478</td><td>A</td><td>AGT</td><td>0.5986</td><td>2.0</td><td>0.0</td><td>286.1535</td><td>-0.5306</td><td>-1.9283</td><td>0.1768</td><td>20.8951</td></tr>
+<tr><td>479</td><td>G</td><td>GTC</td><td>0.5986</td><td>5.6</td><td>0.0</td><td>286.7521</td><td>-4.2701</td><td>-3.6231</td><td>-0.3539</td><td>18.9668</td></tr>
+<tr><td>480</td><td>T</td><td>TCA</td><td>0.5986</td><td>10.0</td><td>0.0</td><td>287.3508</td><td>-9.9450</td><td>-1.0477</td><td>-4.6239</td><td>15.3437</td></tr>
+<tr><td>481</td><td>C</td><td>CAG</td><td>0.5986</td><td>9.6</td><td>0.0</td><td>287.9494</td><td>-8.4537</td><td>4.5492</td><td>-14.5689</td><td>14.2960</td></tr>
+<tr><td>482</td><td>A</td><td>AGC</td><td>0.5986</td><td>6.3</td><td>0.0</td><td>288.5481</td><td>-2.9006</td><td>5.5925</td><td>-23.0226</td><td>18.8452</td></tr>
+<tr><td>483</td><td>G</td><td>GCC</td><td>0.5986</td><td>8.2</td><td>0.0</td><td>289.1467</td><td>0.9831</td><td>8.1409</td><td>-25.9232</td><td>24.4377</td></tr>
+<tr><td>484</td><td>C</td><td>CCT</td><td>0.5986</td><td>4.7</td><td>0.0</td><td>289.7454</td><td>3.0950</td><td>3.5371</td><td>-24.9401</td><td>32.5786</td></tr>
+<tr><td>485</td><td>C</td><td>CTG</td><td>0.5986</td><td>9.6</td><td>0.0</td><td>290.3440</td><td>9.2936</td><td>2.4059</td><td>-21.8451</td><td>36.1157</td></tr>
+<tr><td>486</td><td>T</td><td>TGA</td><td>0.5986</td><td>10.0</td><td>0.0</td><td>290.9427</td><td>9.4096</td><td>-3.3851</td><td>-12.5515</td><td>38.5216</td></tr>
+<tr><td>487</td><td>G</td><td>GAT</td><td>0.5986</td><td>3.6</td><td>0.0</td><td>291.5413</td><td>2.1117</td><td>-2.9156</td><td>-3.1418</td><td>35.1366</td></tr>
+<tr><td>488</td><td>A</td><td>ATG</td><td>0.5986</td><td>8.7</td><td>0.0</td><td>292.1399</td><td>0.2451</td><td>-8.6965</td><td>-1.0302</td><td>32.2209</td></tr>
+<tr><td>489</td><td>T</td><td>TGG</td><td>0.5986</td><td>0.7</td><td>0.0</td><td>292.7386</td><td>-0.3780</td><td>-0.5892</td><td>-0.7851</td><td>23.5244</td></tr>
+<tr><td>490</td><td>G</td><td>GGA</td><td>0.5986</td><td>6.2</td><td>0.0</td><td>293.3372</td><td>-5.7065</td><td>-2.4239</td><td>-1.1631</td><td>22.9352</td></tr>
+<tr><td>491</td><td>G</td><td>GAC</td><td>0.5986</td><td>5.6</td><td>0.0</td><td>293.9359</td><td>-5.4917</td><td>1.0959</td><td>-6.8697</td><td>20.5113</td></tr>
+<tr><td>492</td><td>A</td><td>ACT</td><td>0.5986</td><td>2.0</td><td>0.0</td><td>294.5345</td><td>-1.3997</td><td>1.4286</td><td>-12.3614</td><td>21.6072</td></tr>
+<tr><td>493</td><td>C</td><td>CTG</td><td>0.5986</td><td>9.6</td><td>0.0</td><td>295.1332</td><td>-1.6859</td><td>9.4508</td><td>-13.7611</td><td>23.0358</td></tr>
+<tr><td>494</td><td>T</td><td>TGT</td><td>0.5986</td><td>5.8</td><td>0.0</td><td>295.7318</td><td>2.3762</td><td>5.2909</td><td>-15.4469</td><td>32.4866</td></tr>
+<tr><td>495</td><td>G</td><td>GTT</td><td>0.5986</td><td>1.6</td><td>0.0</td><td>296.3305</td><td>1.3640</td><td>0.8363</td><td>-13.0707</td><td>37.7775</td></tr>
+<tr><td>496</td><td>T</td><td>TTT</td><td>0.5986</td><td>0.1</td><td>0.0</td><td>296.9291</td><td>0.0999</td><td>-0.0049</td><td>-11.7067</td><td>38.6139</td></tr>
+<tr><td>497</td><td>T</td><td>TTT</td><td>0.5986</td><td>0.1</td><td>0.0</td><td>297.5278</td><td>0.0798</td><td>-0.0603</td><td>-11.6068</td><td>38.6090</td></tr>
+<tr><td>498</td><td>T</td><td>TTC</td><td>0.5986</td><td>5.1</td><td>0.0</td><td>298.1264</td><td>1.6279</td><td>-4.8332</td><td>-11.5270</td><td>38.5487</td></tr>
+<tr><td>499</td><td>T</td><td>---</td><td>---</td><td>---</td><td>---</td><td>---</td><td>---</td><td>---</td><td>-9.8991</td><td>33.7155</td></tr>
+<tr><td>500</td><td>C</td><td>---</td><td>---</td><td>---</td><td>---</td><td>---</td><td>---</td><td>---</td><td>---</td><td>---</td></tr>
+</tbody>
+</table>
+<script>
+$.extend( $.fn.dataTable.defaults, {
+    searching: false,
+    ordering:  false,
+    info:     false
+} );
+$(document).ready( function () {
+    $('#coordtable').DataTable({'layout': {
+      topStart: 'info',
+      topEnd: 'search',
+      bottomStart: 'pageLength',
+      bottomEnd: 'paging'
+    },
+    'columnDefs': [
+      {
+        'targets': [0,1,2,3,4,5,6,7,8,9,10],
+        'className': 'dt-right'
+      }
+    ],
+    'language': {
+        'lengthMenu': ' _MENU_ rows per page',
+    }
+    });
+} );
+</script>
