@@ -43,7 +43,7 @@ W &= \left[\left(s_1,s_2,s_3\right),\left(s_2,s_3,s_3\right),...,\left(s_{n-3},s
 \end{aligned}
 \]
 
-As additional shorthand we'll define the the lookup of a given 3-mer \(w_i\) in the \(4\times 4 \times 4\) matrices \(\Omega\), \(\rho\), and \(\tau\) as \(\Omega_i\), \(\rho_i\), and \(\tau_i\) respectively.  The matrix values at each window are used to compute variables \(T_i\) (the cumulative twist-sum), and the deltas \(dx_i\) and \(dy_i\), also for each window:
+As additional shorthand we'll define the lookup of a given 3-mer \(w_i\) in the \(4\times 4 \times 4\) matrices \(\Omega\), \(\rho\), and \(\tau\) as \(\Omega_i\), \(\rho_i\), and \(\tau_i\) respectively.  The matrix values at each window are used to compute variables \(T_i\) (the cumulative twist-sum), and the deltas \(dx_i\) and \(dy_i\), also for each window:
 
 \[
 \begin{aligned}
@@ -65,7 +65,7 @@ where \(x_1 = y_1 = 0\). Note: the range of valid coordinates \(i\) extends to \
 \(x_1\) and \(y_1\) are ignored in subsequent steps.
 
 ### Rolling coordinate averages
-We'll now define a parameter \(a\), where \(2a+1\) is a sliding window size over the range of coordinates \(a+1 \lt i \lt n-a-1\). Usually we set \(a=5\) which means a sliding window of 11 bases ecompasses the rolling average. The rolling averages \(\overline{x}\) and \(\overline{y}\) are also slightly weighted centrally,
+We'll now define a parameter \(a\), where \(2a+1\) is a sliding window size over the range of coordinates \(a+1 \lt i \lt n-a-1\). Usually, we set \(a=5\) which means a sliding window of 11 bases ecompasses the rolling average. The rolling averages \(\overline{x}\) and \(\overline{y}\) are also slightly weighted centrally,
 with the values at either end of the window only contributing half what the central values contribute.
 
 \[
