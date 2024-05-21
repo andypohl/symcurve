@@ -86,4 +86,6 @@ Additionally, a scaling coefficient \(\lambda\) is applied and by default set to
 \]
 
 ### Symmetry
-(*coming soon*)
+The final step is to calculate the symmetry of the curvature values.  A final span parameter \(c\) is usually set to 51 so that the symmetry values \(\xi_i\) can be calculated over the range of \(2c < i < 2c-1\).  Actually, if \(2c > a + b + c\), there are missing symmetry values in the output that could potentially be computed.  For now, the SymCurve algorithm is meant to match the original implementation as closely as possible.
+
+*(more coming soon)*
