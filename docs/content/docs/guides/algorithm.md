@@ -19,6 +19,7 @@ seo:
 ---
 
 ### DNA step parameters
+
 The diagram below shows the six main ways that two consecutive base pairs are distanced from each other.
 
 <div id="dna-img-buffer" style="padding-bottom: 20px">
@@ -30,6 +31,7 @@ Of these six, the three parameters SymCurve uses are \(\Omega\), \(\rho\), and \
 For the roll parameter \(\rho\), SymCurve uses one of two matrices: \(\rho^\alpha\) representing roll in an "active" state, where polymerases may be actively transcribing the DNA, or \(\rho^\beta\) representing roll in a "simple" or "inactive" state.
 
 ### 3-mer windowing
+
 In our equations later, we'll refer to the input nucleotide sequence as \(S\), with length \(n\).  Individual nucleotides \(s_i\) form \(S\) as in the notation below:
 
 \[S = \left(s_1,s_2,...,s_{n-1},s_n\right)\]
@@ -54,6 +56,7 @@ dy_i &= \rho_i \cos(T_i) + \tau_i \cos(T_i - \pi/2)
 \]
 
 ### Mapping into 2D space
+
 Across the space of \(n-2\) 3-mers \(w_i\), we'll define \(x_i\) and \(y_i\) coordinates as the sum of the previous coordinates/deltas as:
 \[
 \begin{aligned}
@@ -65,6 +68,7 @@ where \(x_1 = y_1 = 0\). Note: the range of valid coordinates \(i\) extends to \
 \(x_1\) and \(y_1\) are ignored in subsequent steps.
 
 ### Rolling coordinate averages
+
 We'll now define a parameter \(a\), where \(2a+1\) is a sliding window size over the range of coordinates \(a+1 \lt i \lt n-a-1\). Usually, we set \(a=5\) which means a sliding window of 11 bases ecompasses the rolling average. The rolling averages \(\overline{x}\) and \(\overline{y}\) are also slightly weighted centrally,
 with the values at either end of the window only contributing half what the central values contribute.
 
@@ -76,6 +80,7 @@ with the values at either end of the window only contributing half what the cent
 \]
 
 ### Curvature
+
 Using the rolling averages, the curvature values \(\kappa_i\) are now possible to calculate over a range of
 \(a+b+1 < i < n-a-b-1\) where \(b\), is another half-span, usually set to 15. \(\kappa_i\) is computed as the
 Euclidean distance between the points \((\overline{x}_{i+b}, \overline{y}_{i+b})\) and \((\overline{x}_{i-b}, \overline{y}_{i-b})\).
@@ -86,6 +91,7 @@ Additionally, a scaling coefficient \(\lambda\) is applied and by default set to
 \]
 
 ### Symmetry
+
 The final step is to calculate the symmetry of the curvature values.  A final span parameter \(c\) is usually set to 51 so that the symmetry values \(\xi_i\) can be calculated over the range of \(2c < i < 2c-1\).  Actually, if \(2c > a + b + c\), there are missing symmetry values in the output that could potentially be computed.  For now, the SymCurve algorithm is meant to match the original implementation as closely as possible.
 
 *(more coming soon)*

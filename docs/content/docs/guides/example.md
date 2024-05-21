@@ -20,6 +20,7 @@ seo:
 <link rel="stylesheet" href="https://cdn.datatables.net/2.0.7/css/dataTables.dataTables.css" />
   
 <script src="https://cdn.datatables.net/2.0.7/js/dataTables.js"></script>
+
 ### Sequence
 
 Consider the 500 nucleotides of sequences below.  It's enough to wrap at least two eukaryotic nucleosomes.
@@ -49,6 +50,7 @@ For this example, we'll use a typical set of parameters:
 * [\(\rho = \rho^\beta\)](/docs/reference/matrices/#roll)
 
 ### 3-mer step values and coordinates
+
 Below is a table of the sequence values, 3-mers, matrix values, and finally the calculated coordinates. Note that because multiple bases may be used in some of the calculations, some of the values at the edges are missing.
 <style>
         /* If the table has an id */
@@ -590,7 +592,6 @@ Below is a table of the sequence values, 3-mers, matrix values, and finally the 
 <tr><td>500</td><td>C</td><td>---</td><td>---</td><td>---</td><td>---</td><td>---</td><td>---</td><td>---</td><td>---</td><td>---</td></tr>
 </tbody>
 </table>
-
 
 ### Rolling mean, curvature, and symmetry
 
@@ -1156,4 +1157,5 @@ $(document).ready( function () {
 </script>
 
 ### Plotting the results
+
 *(coming soon)*
