@@ -15,12 +15,11 @@ reviews:
       - "DO NOT MERGE"
     drafts: false
   path_filters:
-    - "!perl/**"
-    - "!docs/**"
     - "docs/content/**/*.md"
     - "**/README.md"
     - "src/**/*.rs"
     - ".github/workflows/**"
+    - "!perl/**"
   path_instructions:
     - path: "docs/content/**/*.md"
       instructions: "Please look for likely typos and grammatical errors."
