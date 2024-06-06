@@ -28,6 +28,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: "${{ github.head_ref || github.ref }}"
       - name: Call build workflow
         uses: ./.github/workflows/rust.yml
         with:
