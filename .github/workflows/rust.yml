@@ -12,7 +12,6 @@ jobs:
   build:
     runs-on: ${{ inputs.runner }}
     steps:
-      - uses: actions/checkout@v4
       - name: Print Cargo.lock hash
         run: "echo 'Cargo.lock hash: ' ${{ hashFiles('**/Cargo.lock') }}"
       - uses: actions/cache@v4
