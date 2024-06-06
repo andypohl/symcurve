@@ -12,19 +12,21 @@ function getPreferredScheme() {
 }
 
 function toggleThemeForImage() {
-  $('img.themed').each(function() {
-    const savedTheme = localStorage.getItem('theme') || getPreferredScheme();
-    var src = $(this).attr('src');
-    if (src.match(/-light\.png$/) && savedTheme == 'dark') {
-      $(this).attr('src', src.replace('-light.png', '-dark.png'));
-    } else if (src.match(/-dark\.png$/) && savedTheme == 'light') {
-      $(this).attr('src', src.replace('-dark.png', '-light.png'));
+  const images = document.querySelectorAll('img.themed');
+  const savedTheme = localStorage.getItem('theme') || getPreferredScheme();
+
+  images.forEach((img) => {
+    let src = img.getAttribute('src');
+    if (src.match(/-light\.png$/) && savedTheme === 'dark') {
+      img.setAttribute('src', src.replace('-light.png', '-dark.png'));
+    } else if (src.match(/-dark\.png$/) && savedTheme === 'light') {
+      img.setAttribute('src', src.replace('-dark.png', '-light.png'));
     }
   });
 }
-$(document).ready(function() {
+document.addEventListener('DOMContentLoaded', function() {
   toggleThemeForImage();
-  $('#buttonColorMode').click(function() {
+  document.getElementById('buttonColorMode').addEventListener('click', function() {
     toggleThemeForImage();
   });
 });
