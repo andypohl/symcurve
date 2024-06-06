@@ -1,31 +1,16 @@
-name: Rust Build/Test
+name: Rust Build/Test Base
 
 on:
-  push:
-    branches-ignore:
-      - "main"
-    paths:
-      - "tests/**/*.rs"
-      - "src/**/*.rs"
-      - "Cargo.toml"
-      - "Cargo.lock"
-  pull_request:
-    branches:
-      - "main"
-    paths:
-      - "tests/**/*.rs"
-      - "src/**/*.rs"
-      - "Cargo.toml"
-      - "Cargo.lock"
-env:
-  CARGO_TERM_COLOR: always
+  workflow_call:
+    inputs:
+      runner:
+        description: "The runner to use"
+        required: true
+        type: string
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ inputs.runner }}
     steps:
       - uses: actions/checkout@v4
       - name: Print Cargo.lock hash

@@ -1,0 +1,33 @@
+name: Rust Build/Test
+on:
+  push:
+    branches-ignore:
+      - "main"
+    paths:
+      - "tests/**/*.rs"
+      - "src/**/*.rs"
+      - "Cargo.toml"
+      - "Cargo.lock"
+  pull_request:
+    branches:
+      - "main"
+    paths:
+      - "tests/**/*.rs"
+      - "src/**/*.rs"
+      - "Cargo.toml"
+      - "Cargo.lock"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  call-build:
+    strategy:
+      matrix:
+        runner: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Call build workflow
+        uses: ./.github/workflows/rust.yml
+        with:
+          runner: ${{ matrix.runner }}

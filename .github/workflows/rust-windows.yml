@@ -1,0 +1,19 @@
+name: Rust Build/Test on Windows
+
+# This workflow is triggered manually.  Testing on
+# Windows is not as important as testing on Unix, and it takes
+# a lot longer to run.
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  call-build:
+    runs-on: windows-latest
+    steps:
+      - name: Call build workflow
+        uses: ./.github/workflows/rust.yml
+        with:
+          runner: windows-latest
