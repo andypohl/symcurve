@@ -29,6 +29,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Call build workflow
-        uses: ./.github/workflows/rust.yml
+        uses: ./.github/workflows/rust.yml@deps
         with:
           runner: ${{ matrix.runner }}
