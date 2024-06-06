@@ -14,8 +14,6 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: "${{ github.head_ref || github.ref }}"
       - name: Call build workflow
         uses: ./.github/workflows/rust.yml
         with:
