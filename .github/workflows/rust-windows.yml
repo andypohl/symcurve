@@ -11,10 +11,6 @@ env:
 
 jobs:
   call-build:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Call build workflow
-        uses: ./.github/workflows/rust.yml@deps
-        with:
-          runner: windows-latest
+    uses: ./.github/workflows/rust.yml
+    with:
+      runner: windows-latest

@@ -25,10 +25,6 @@ jobs:
     strategy:
       matrix:
         runner: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Call build workflow
-        uses: ./.github/workflows/rust.yml@deps
-        with:
-          runner: ${{ matrix.runner }}
+    uses: ./.github/workflows/rust.yml
+    with:
+      runner: ${{ matrix.runner }}
