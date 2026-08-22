@@ -49,6 +49,11 @@ impl RecordPiece {
 /// ATGCA
 /// ```
 pub fn split_seq_by_n(record: Record) -> Vec<RecordPiece> {
+    // Move the record into a single Rc up front. Every piece then clones this
+    // one handle, so they all point at the same allocation. Calling Rc::new
+    // per piece would instead allocate a fresh box holding a full copy of the
+    // sequence, which is what the shared ownership here is meant to avoid.
+    let record = Rc::new(record);
     let mut records = Vec::new();
     let n = record.sequence().len();
     let seq = record.sequence().as_ref();
@@ -68,8 +73,7 @@ pub fn split_seq_by_n(record: Record) -> Vec<RecordPiece> {
             // Position is 1-based so add 1 to left
             let start = Position::try_from(left + 1).unwrap();
             let end = Position::try_from(right).unwrap();
-            let rec_rc = Rc::new(record.to_owned());
-            let piece = RecordPiece::new(rec_rc, start, end);
+            let piece = RecordPiece::new(Rc::clone(&record), start, end);
             records.push(piece);
         }
     }
@@ -120,6 +124,27 @@ mod tests {
         assert_eq!(split_records[1].sequence().as_ref(), b"ATGCA".to_vec());
         assert_eq!(usize::from(split_records[1].start), 13);
         assert_eq!(usize::from(split_records[1].end), 17);
+    }
+
+    #[test]
+    fn test_pieces_share_one_record() {
+        // Four pieces separated by runs of Ns. All of them must point at the
+        // same underlying Record rather than each holding their own copy.
+        let src = b">chr42\nACGTNNACGTNNACGTNNACGT\n";
+        let mut reader = noodles_fasta::io::Reader::new(&src[..]);
+        let record = reader.records().next().unwrap().unwrap();
+        let pieces = split_seq_by_n(record);
+        assert_eq!(pieces.len(), 4);
+        // One allocation, one handle per piece.
+        assert_eq!(Rc::strong_count(&pieces[0].record), 4);
+        for piece in &pieces[1..] {
+            assert!(Rc::ptr_eq(&pieces[0].record, &piece.record));
+        }
+        // Sharing the record must not disturb the slicing.
+        assert_eq!(pieces[0].sequence().as_ref(), b"ACGT".to_vec());
+        assert_eq!(pieces[3].sequence().as_ref(), b"ACGT".to_vec());
+        assert_eq!(usize::from(pieces[3].start), 19);
+        assert_eq!(usize::from(pieces[3].end), 22);
     }
 
     #[test]
