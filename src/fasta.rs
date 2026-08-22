@@ -1,28 +1,42 @@
 //! Functions for working with FASTA files.
 
-use std::rc::Rc;
+use std::sync::Arc;
 
 use noodles_core::Position;
 use noodles_fasta::Record;
 use noodles_fasta::record::Sequence;
 
 /// One Record will be split into multiple RecordPieces.
-/// The original Record is kept as an Rc so that each of the
-/// RecordPieces can share the same ownership.
+/// The original Record is kept as an Arc so that each of the
+/// RecordPieces can share the same ownership. Arc rather than Rc because the
+/// pieces are scored in parallel, and Rc is not Send.
 pub struct RecordPiece {
-    pub record: Rc<Record>,
+    pub record: Arc<Record>,
     pub start: Position,
     pub end: Position,
 }
 
 impl RecordPiece {
-    fn new(record: Rc<Record>, start: Position, end: Position) -> Self {
+    fn new(record: Arc<Record>, start: Position, end: Position) -> Self {
         Self { record, start, end }
     }
 
     /// Get the sequence of the RecordPiece by slicing into the original Record.
+    ///
+    /// This copies the slice out. Prefer [`RecordPiece::bases`] when the bytes are only
+    /// going to be read, which is the case on the scoring path.
     pub fn sequence(&self) -> Sequence {
         self.record.sequence().slice(self.start..=self.end).unwrap()
+    }
+
+    /// Borrow this piece's bases directly out of the shared Record.
+    ///
+    /// Unlike [`RecordPiece::sequence`] this allocates nothing, so scoring a piece does
+    /// not begin by copying it. `start` and `end` are 1-based and inclusive.
+    pub fn bases(&self) -> &[u8] {
+        let start = usize::from(self.start) - 1;
+        let end = usize::from(self.end);
+        &self.record.sequence().as_ref()[start..end]
     }
 }
 
@@ -64,11 +78,11 @@ fn is_gap(base: u8) -> bool {
 /// ATGCA
 /// ```
 pub fn split_seq_by_gaps(record: Record) -> Vec<RecordPiece> {
-    // Move the record into a single Rc up front. Every piece then clones this
-    // one handle, so they all point at the same allocation. Calling Rc::new
+    // Move the record into a single Arc up front. Every piece then clones this
+    // one handle, so they all point at the same allocation. Calling Arc::new
     // per piece would instead allocate a fresh box holding a full copy of the
     // sequence, which is what the shared ownership here is meant to avoid.
-    let record = Rc::new(record);
+    let record = Arc::new(record);
     let mut records = Vec::new();
     let n = record.sequence().len();
     let seq = record.sequence().as_ref();
@@ -88,7 +102,7 @@ pub fn split_seq_by_gaps(record: Record) -> Vec<RecordPiece> {
             // Position is 1-based so add 1 to left
             let start = Position::try_from(left + 1).unwrap();
             let end = Position::try_from(right).unwrap();
-            let piece = RecordPiece::new(Rc::clone(&record), start, end);
+            let piece = RecordPiece::new(Arc::clone(&record), start, end);
             records.push(piece);
         }
     }
@@ -153,9 +167,9 @@ mod tests {
         let pieces = split_seq_by_gaps(record);
         assert_eq!(pieces.len(), 4);
         // One allocation, one handle per piece.
-        assert_eq!(Rc::strong_count(&pieces[0].record), 4);
+        assert_eq!(Arc::strong_count(&pieces[0].record), 4);
         for piece in &pieces[1..] {
-            assert!(Rc::ptr_eq(&pieces[0].record, &piece.record));
+            assert!(Arc::ptr_eq(&pieces[0].record, &piece.record));
         }
         // Sharing the record must not disturb the slicing.
         assert_eq!(pieces[0].sequence().as_ref(), b"ACGT".to_vec());

@@ -307,6 +307,7 @@ dependencies = [
  "clap",
  "noodles-core",
  "noodles-fasta",
+ "rayon",
 ]
 
 [[package]]

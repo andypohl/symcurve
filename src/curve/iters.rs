@@ -533,7 +533,7 @@ impl<I: Iterator<Item = u8>> Iterator for CurveIter<I> {
 ///   the size of the window.
 /// * `step_c`: The distance from the midpoint base to the sides in the curve window.
 impl<I: Iterator<Item = u8>> CurveIter<I> {
-    fn new(
+    pub(crate) fn new(
         seq_iter: I,
         roll_type: matrix::RollType,
         step_b: usize,
