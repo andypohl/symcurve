@@ -92,33 +92,78 @@ impl fmt::Display for MatrixLookupError {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) enum RollType {
     Simple,
     Active,
 }
 
-/// Maps a nucleotide to its index in a `NucMatrix`.
+/// Sentinel stored in `NUC_TABLE` for any byte that is not a scoreable base.
+const NOT_A_BASE: u8 = u8::MAX;
+
+/// Direct lookup from an ASCII byte to its index in a `NucMatrix`.
 ///
-/// Accepts either case, so soft-masked sequence (RepeatMasker lowercases repetitive
-/// regions) is treated as ordinary sequence rather than as unknown bases. Returns
-/// `None` for anything that is not A, C, G, or T, which includes `N` and the IUPAC
-/// ambiguity codes; callers are expected to have split those out already.
+/// Both cases are populated, so soft-masked sequence (RepeatMasker lowercases
+/// repetitive regions) is treated as ordinary sequence rather than as unknown bases.
+/// Everything else, including `N` and the IUPAC ambiguity codes, maps to `NOT_A_BASE`;
+/// callers are expected to have split those out already.
+///
+/// This runs three times per base over an entire genome, so it is a flat table rather
+/// than a case conversion followed by a match.
+const NUC_TABLE: [u8; 256] = {
+    let mut table = [NOT_A_BASE; 256];
+    table[b'A' as usize] = 0;
+    table[b'a' as usize] = 0;
+    table[b'T' as usize] = 1;
+    table[b't' as usize] = 1;
+    table[b'G' as usize] = 2;
+    table[b'g' as usize] = 2;
+    table[b'C' as usize] = 3;
+    table[b'c' as usize] = 3;
+    table
+};
+
+/// Maps a nucleotide to its index in a `NucMatrix`, in either case.
+///
+/// Returns `None` for anything that is not A, C, G, or T.
+#[inline]
 pub(crate) fn nuc_index(base: u8) -> Option<usize> {
-    match base.to_ascii_uppercase() {
-        b'A' => Some(0),
-        b'T' => Some(1),
-        b'G' => Some(2),
-        b'C' => Some(3),
-        _ => None,
+    match NUC_TABLE[base as usize] {
+        NOT_A_BASE => None,
+        ix => Some(ix as usize),
     }
+}
+
+/// Decodes a triplet into its three `NucMatrix` indices.
+///
+/// Several matrices are consulted for the same triplet on every base, so the ASCII
+/// decode is done once here and the resulting indices reused, rather than re-decoding
+/// per matrix. The result is a fixed-size array, so no allocation is involved.
+///
+/// # Errors
+///
+/// Returns a `MatrixLookupError` naming the offending base if any of the three is not
+/// A, C, G, or T.
+pub(crate) fn triplet_indices(triplet: &[u8; 3]) -> Result<[usize; 3], MatrixLookupError> {
+    let mut ixs = [0usize; 3];
+    for (slot, &base) in ixs.iter_mut().zip(triplet.iter()) {
+        *slot = nuc_index(base).ok_or_else(|| MatrixLookupError {
+            details: format!("unrecognized nucleotide {:?}", base as char),
+        })?;
+    }
+    Ok(ixs)
+}
+
+/// Reads a value out of a matrix using indices already decoded by `triplet_indices`.
+#[inline]
+pub(crate) fn lookup_by_index(ixs: &[usize; 3], matrix: &NucMatrix) -> f64 {
+    matrix[ixs[0]][ixs[1]][ixs[2]]
 }
 
 /// Looks up a value in a nucleotide matrix based on a triplet of nucleotides.
 ///
-/// This function takes a triplet of nucleotides and a nucleotide matrix, and returns the value
-/// at the corresponding position in the matrix. The triplet is expected to contain the ASCII
-/// values of 'A', 'C', 'G', or 'T', in either case.
+/// This is the convenience form taking an arbitrary slice. The hot path decodes once with
+/// `triplet_indices` and then calls `lookup_by_index` per matrix instead.
 ///
 /// # Arguments
 ///
@@ -137,21 +182,10 @@ pub(crate) fn nuc_index(base: u8) -> Option<usize> {
 /// Returns a `MatrixLookupError` if the triplet is not of length 3, or if it contains a base
 /// that is not A, C, G, or T. These are reported as distinct errors rather than being conflated.
 pub(crate) fn matrix_lookup(triplet: &[u8], matrix: &NucMatrix) -> Result<f64, MatrixLookupError> {
-    let [a, b, c] = match triplet {
-        [a, b, c] => [*a, *b, *c],
-        _ => {
-            return Err(MatrixLookupError {
-                details: format!("triplet must be of length 3, got {}", triplet.len()),
-            });
-        }
-    };
-    let mut ixs = [0usize; 3];
-    for (slot, base) in ixs.iter_mut().zip([a, b, c]) {
-        *slot = nuc_index(base).ok_or_else(|| MatrixLookupError {
-            details: format!("unrecognized nucleotide {:?}", base as char),
-        })?;
-    }
-    Ok(matrix[ixs[0]][ixs[1]][ixs[2]])
+    let triplet: &[u8; 3] = triplet.try_into().map_err(|_| MatrixLookupError {
+        details: format!("triplet must be of length 3, got {}", triplet.len()),
+    })?;
+    Ok(lookup_by_index(&triplet_indices(triplet)?, matrix))
 }
 
 #[cfg(test)]
@@ -183,6 +217,40 @@ mod tests {
         assert!(matrix_lookup(b"AA", &ROLL_ACTIVE).is_err());
         assert!(matrix_lookup(b"AAAA", &ROLL_ACTIVE).is_err());
         assert!(matrix_lookup(b"AAN", &ROLL_ACTIVE).is_err());
+    }
+
+    #[test]
+    fn test_nuc_index_over_the_whole_byte_range() {
+        // The decode table is written out by hand, so check every possible byte
+        // rather than a sample: a wrong or missing entry is otherwise easy to miss.
+        for byte in 0u8..=255 {
+            let expected = match byte {
+                b'A' | b'a' => Some(0),
+                b'T' | b't' => Some(1),
+                b'G' | b'g' => Some(2),
+                b'C' | b'c' => Some(3),
+                _ => None,
+            };
+            assert_eq!(
+                nuc_index(byte),
+                expected,
+                "byte {byte:?} ({:?})",
+                byte as char
+            );
+        }
+    }
+
+    #[test]
+    fn test_triplet_indices_matches_per_base_decoding() {
+        let triplet = *b"CgA";
+        assert_eq!(triplet_indices(&triplet).unwrap(), [3, 2, 0]);
+        // Decoding once must agree with indexing the matrix the long way.
+        assert_relative_eq!(
+            lookup_by_index(&triplet_indices(&triplet).unwrap(), &ROLL_SIMPLE),
+            matrix_lookup(&triplet, &ROLL_SIMPLE).unwrap(),
+            epsilon = 1e-12
+        );
+        assert!(triplet_indices(b"CgN").is_err());
     }
 
     #[test]

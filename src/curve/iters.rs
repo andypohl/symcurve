@@ -87,17 +87,20 @@ where
         }
         // When the buffer is full, calculate the twist, roll, and tilt values.
         if self.base_buffer.len() >= matrix::TRIPLET_SIZE {
-            let triplet: Vec<u8> = self.base_buffer.iter().cloned().take(3).collect();
-            let twist = matrix::matrix_lookup(&triplet, &matrix::TWIST).unwrap();
+            // Fixed-size, so no allocation: this runs once per base.
+            let triplet: [u8; matrix::TRIPLET_SIZE] = [
+                self.base_buffer[0],
+                self.base_buffer[1],
+                self.base_buffer[2],
+            ];
+            // Decode the ASCII bases once, then index each matrix with the result.
+            let ixs = matrix::triplet_indices(&triplet).unwrap();
+            let twist = matrix::lookup_by_index(&ixs, &matrix::TWIST);
             let roll = match self.roll_type {
-                matrix::RollType::Simple => {
-                    matrix::matrix_lookup(&triplet, &matrix::ROLL_SIMPLE).unwrap()
-                }
-                matrix::RollType::Active => {
-                    matrix::matrix_lookup(&triplet, &matrix::ROLL_ACTIVE).unwrap()
-                }
+                matrix::RollType::Simple => matrix::lookup_by_index(&ixs, &matrix::ROLL_SIMPLE),
+                matrix::RollType::Active => matrix::lookup_by_index(&ixs, &matrix::ROLL_ACTIVE),
             };
-            let tilt = matrix::matrix_lookup(&triplet, &matrix::TILT).unwrap();
+            let tilt = matrix::lookup_by_index(&ixs, &matrix::TILT);
             self.twist_sum += twist;
             // Create a TripletData instance and return it.
             let window = TripletData {
@@ -106,7 +109,7 @@ where
                 tilt,
                 dx: (roll * self.twist_sum.sin()) + (tilt * (self.twist_sum + PI / 2.0).sin()),
                 dy: (roll * self.twist_sum.cos()) + (tilt * (self.twist_sum + PI / 2.0).cos()),
-                roll_type: self.roll_type.clone(),
+                roll_type: self.roll_type,
             };
             self.base_buffer.pop_front();
             Some(window)
@@ -234,9 +237,12 @@ where
     /// A `Some(CoordsData)` with the next coordinates and `TripletData`, or `None` if there are no more items.
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(triplet_data) = self.inner.next() {
-            let result = Some(self.create_coords_data(Some(triplet_data.to_owned())));
-            self.prev_dx = triplet_data.dx;
-            self.prev_dy = triplet_data.dy;
+            // Read the deltas out before moving the data into the CoordsData, rather
+            // than cloning the whole struct to keep a copy around.
+            let (dx, dy) = (triplet_data.dx, triplet_data.dy);
+            let result = Some(self.create_coords_data(Some(triplet_data)));
+            self.prev_dx = dx;
+            self.prev_dy = dy;
             if !self.head {
                 self.head = true;
                 return self.next();
@@ -470,9 +476,8 @@ where
         if self.buffer.len() >= window_size {
             let left = self.buffer.front().unwrap();
             let right = self.buffer.back().unwrap();
-            let curve = ((right.y_bar - left.y_bar).powf(2.0)
-                + (right.x_bar - left.x_bar).powf(2.0))
-            .sqrt();
+            let curve =
+                ((right.y_bar - left.y_bar).powi(2) + (right.x_bar - left.x_bar).powi(2)).sqrt();
             self.buffer.pop_front();
             Some(curve)
         } else {
