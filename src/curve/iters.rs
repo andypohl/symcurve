@@ -9,6 +9,28 @@ use std::collections::VecDeque;
 use std::f64::consts::{PI, TAU};
 use std::iter::{FusedIterator, Iterator};
 
+/// The step a triplet contributes to the traced path.
+///
+/// The roll displaces along the accumulated twist and the tilt along the perpendicular:
+///
+/// ```text
+/// dx = roll * sin(T) + tilt * sin(T - pi/2)
+/// dy = roll * cos(T) + tilt * cos(T - pi/2)
+/// ```
+///
+/// The tilt term is `T - pi/2`, matching both the reference implementation and the
+/// published equations. `T + pi/2` is the opposite perpendicular, which is the same as
+/// negating the tilt, so the sign here is not free to choose. It has no effect while the
+/// supplied tilt matrix is uniformly zero, which is why it is pinned by a test on this
+/// function rather than by one on the iterator.
+fn step(roll: f64, tilt: f64, twist_sum: f64) -> TripletData {
+    let perpendicular = twist_sum - PI / 2.0;
+    TripletData {
+        dx: (roll * twist_sum.sin()) + (tilt * perpendicular.sin()),
+        dy: (roll * twist_sum.cos()) + (tilt * perpendicular.cos()),
+    }
+}
+
 /// How many items a sliding window will still yield.
 ///
 /// A window of `window` items over `remaining` inputs yields `remaining - window + 1`, and
@@ -119,10 +141,7 @@ where
                 self.twist_sum = self.twist_sum.rem_euclid(TAU);
             }
             // Create a TripletData instance and return it.
-            let window = TripletData {
-                dx: (roll * self.twist_sum.sin()) + (tilt * (self.twist_sum + PI / 2.0).sin()),
-                dy: (roll * self.twist_sum.cos()) + (tilt * (self.twist_sum + PI / 2.0).cos()),
-            };
+            let window = step(roll, tilt, self.twist_sum);
             self.base_buffer.pop_front();
             Some(window)
         } else {
@@ -1028,6 +1047,70 @@ mod tests {
         assert_relative_eq!(curves[5], 3.7726, epsilon = 1e-4);
         assert_relative_eq!(curves[6], 3.3483, epsilon = 1e-4);
         assert_relative_eq!(curves[7], 3.1042, epsilon = 1e-4);
+    }
+
+    #[test]
+    fn test_step_places_tilt_on_the_reference_side() {
+        // The supplied tilt matrix is uniformly zero, so no test driving the iterator can
+        // tell T - pi/2 from T + pi/2. Exercise the formula directly with a non-zero tilt.
+        //
+        // Expected values come from the reference implementation's expression,
+        //   dx = roll*sin(T) + tilt*sin(T - pi/2)
+        //   dy = roll*cos(T) + tilt*cos(T - pi/2)
+        // written out here as its trigonometric identity so the test does not simply
+        // restate the code: sin(T - pi/2) = -cos(T) and cos(T - pi/2) = sin(T).
+        for &(roll, tilt, twist) in &[
+            (5.0, 2.0, 0.0),
+            (0.7, 1.5, 0.598647428),
+            (3.05865, -0.25, 1.7),
+            (0.0, 1.0, 3.0),
+            (6.2, 0.0, 2.5),
+        ] {
+            let got = step(roll, tilt, twist);
+            let expected_dx = roll * twist.sin() - tilt * twist.cos();
+            let expected_dy = roll * twist.cos() + tilt * twist.sin();
+            assert_relative_eq!(got.dx, expected_dx, epsilon = 1e-12);
+            assert_relative_eq!(got.dy, expected_dy, epsilon = 1e-12);
+        }
+    }
+
+    #[test]
+    fn test_step_tilt_sign_is_not_the_opposite_perpendicular() {
+        // T + pi/2 is the exact negation of T - pi/2, so a sign slip is invisible unless
+        // something checks it. With a non-zero tilt the two differ by twice the tilt term.
+        let (roll, tilt, twist) = (2.0, 1.0, 0.9);
+        let got = step(roll, tilt, twist);
+        let wrong_dx = roll * twist.sin() + tilt * (twist + PI / 2.0).sin();
+        assert!(
+            (got.dx - wrong_dx).abs() > 1.0,
+            "dx {} matches the opposite perpendicular {}",
+            got.dx,
+            wrong_dx
+        );
+        // Tilt contributes nothing when it is zero, whichever convention is used.
+        assert_relative_eq!(
+            step(roll, 0.0, twist).dx,
+            roll * twist.sin(),
+            epsilon = 1e-12
+        );
+    }
+
+    #[test]
+    fn test_step_matches_the_pipeline() {
+        // The iterator must actually be using this function.
+        let seq = b"CCAACATTTT";
+        let twist = matrix::matrix_lookup(b"CCA", &matrix::TWIST).unwrap();
+        let roll = matrix::matrix_lookup(b"CCA", &matrix::ROLL_SIMPLE).unwrap();
+        let tilt = matrix::matrix_lookup(b"CCA", &matrix::TILT).unwrap();
+        let first = seq
+            .iter()
+            .copied()
+            .triplet_windows_iter(matrix::RollType::Simple)
+            .next()
+            .unwrap();
+        let expected = step(roll, tilt, twist);
+        assert_relative_eq!(first.dx, expected.dx, epsilon = 1e-12);
+        assert_relative_eq!(first.dy, expected.dy, epsilon = 1e-12);
     }
 
     #[test]

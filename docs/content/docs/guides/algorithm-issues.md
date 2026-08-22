@@ -123,10 +123,9 @@ If you need byte-identical output across runs, pass the same `--max-memory` valu
 differences are below the precision bigWig stores, but bedGraph is written as text and will
 show them.
 
-## The tilt term has a sign discrepancy
+## The tilt term is inert
 
-The equations on the Algorithm page, and the original Perl implementation, both write the
-tilt contribution as
+The tilt contribution to each step is
 
 \[
 \begin{aligned}
@@ -135,12 +134,16 @@ dy_i &= \rho_i \cos(T_i) + \tau_i \cos(T_i - \pi/2)
 \end{aligned}
 \]
 
-The Rust implementation uses \(T_i + \pi/2\) rather than \(T_i - \pi/2\). Because the
-supplied tilt matrix \(\tau\) is uniformly zero, both terms vanish and the two forms
-produce identical results today. The discrepancy is dormant rather than harmless: it would
-change every value the moment a non-zero tilt matrix were supplied, which is exactly what
-the planned `--matrices` option would allow. It is recorded here so that whoever implements
-that option resolves the sign first.
+The supplied tilt matrix \(\tau\) is uniformly zero, so this term contributes nothing to
+any value SymCurve currently produces. Curvature is determined entirely by roll and twist.
+
+The sign inside the tilt term is worth a note for anyone extending this. Writing
+\(T_i + \pi/2\) instead of \(T_i - \pi/2\) is the opposite perpendicular, and since
+\(\sin(T+\pi/2) = -\sin(T-\pi/2)\) it amounts to negating \(\tau\). While \(\tau\)
+is zero the two are indistinguishable, and the implementation did use the wrong one for a
+time without any test being able to detect it. It now matches the reference implementation
+and the equations above, and is pinned by a test that calls the step function directly with
+a non-zero tilt, since nothing driving the iterator can exercise it.
 
 ## `--curve-step-two` cannot be set independently
 
