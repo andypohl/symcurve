@@ -966,6 +966,34 @@ mod tests {
     }
 
     #[test]
+    fn test_roll_type_selects_the_matching_matrix() {
+        // Guards the pairing that the ROLL_SIMPLE / ROLL_ACTIVE doc comments describe.
+        // The two matrices disagree at CCA (0.7 simple, 3.05865 active), so this fails
+        // if the constants are ever swapped to "fix" a mismatch with their docs.
+        let cca = b"CCA";
+        let roll_for = |roll_type: matrix::RollType| -> f64 {
+            cca.iter()
+                .copied()
+                .triplet_windows_iter(roll_type)
+                .next()
+                .unwrap()
+                .roll
+        };
+        assert_relative_eq!(roll_for(matrix::RollType::Simple), 0.7, epsilon = 1e-9);
+        assert_relative_eq!(roll_for(matrix::RollType::Active), 3.05865, epsilon = 1e-9);
+        assert_relative_eq!(
+            matrix::matrix_lookup(cca, &matrix::ROLL_SIMPLE).unwrap(),
+            0.7,
+            epsilon = 1e-9
+        );
+        assert_relative_eq!(
+            matrix::matrix_lookup(cca, &matrix::ROLL_ACTIVE).unwrap(),
+            3.05865,
+            epsilon = 1e-9
+        );
+    }
+
+    #[test]
     fn test_curve_iter_is_case_insensitive() {
         // Soft-masked sequence must score identically to the same sequence unmasked.
         // Before non-ACGT handling was added, the lowercase run panicked in the

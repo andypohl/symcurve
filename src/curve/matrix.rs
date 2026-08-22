@@ -18,8 +18,11 @@ pub const TWIST: NucMatrix = [[[0.598647428; 4]; 4]; 4];
 /// for completeness. The values are all 0.0 for all combinations of nucleotide triplets.
 pub const TILT: NucMatrix = [[[0.0; 4]; 4]; 4];
 
-/// The simple version fo the ROLL matrix is used to calculate the roll angle in three nucleotides
-/// of DNA.
+/// The "activated" version of the ROLL matrix is used to calculate the roll angle in three
+/// nucleotides of DNA. This matrix differs from the simple matrix in that the angle
+/// values represent a more activated state of the nucleosomes bound to the DNA.
+///
+/// Selected by the crate-internal `RollType::Active`.
 pub const ROLL_ACTIVE: NucMatrix = [
     [
         [0.0633, 0.3500, 4.6709, 2.64115],
@@ -47,9 +50,10 @@ pub const ROLL_ACTIVE: NucMatrix = [
     ],
 ];
 
-/// The "activated" version of the ROLL matrix is used to calculate the roll angle in three
-/// nucleotides of DNA. This matrix differs from the simple matrix in that the angle
-/// values represent a more activated state of the nucleosomes bound to the DNA.
+/// The simple version of the ROLL matrix is used to calculate the roll angle in three nucleotides
+/// of DNA.
+///
+/// Selected by the crate-internal `RollType::Simple`.
 pub const ROLL_SIMPLE: NucMatrix = [
     [
         [0.1, 0.0, 4.2, 1.6],
