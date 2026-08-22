@@ -533,7 +533,25 @@ impl<I: Iterator<Item = u8>> Iterator for CurveIter<I> {
 ///   the size of the window.
 /// * `step_c`: The distance from the midpoint base to the sides in the curve window.
 impl<I: Iterator<Item = u8>> CurveIter<I> {
-    pub(crate) fn new(
+    /// Build a curvature iterator over a stream of bases.
+    ///
+    /// Bases must be A, C, G or T in either case; anything else will panic, so split a
+    /// record with [`crate::fasta::split_seq_by_gaps`] first. For scoring whole records
+    /// use [`crate::curve::scan`], which handles splitting, positions and threading.
+    ///
+    /// The first `step_b + step_c + 1` bases and the last of the same produce no value,
+    /// because the windows need context on both sides.
+    ///
+    /// ```
+    /// use symcurve::curve::iters::CurveIter;
+    /// use symcurve::curve::matrix::RollType;
+    ///
+    /// let seq = b"CCAACATTTTGACTTTTTGGGAGGGCACTAGCACCTATCTACCCTGAATC";
+    /// let curves: Vec<f64> =
+    ///     CurveIter::new(seq.iter().copied(), RollType::Simple, 5, 15, 0.33335).collect();
+    /// assert_eq!(curves.len(), seq.len() - 2 * (5 + 15 + 1));
+    /// ```
+    pub fn new(
         seq_iter: I,
         roll_type: matrix::RollType,
         step_b: usize,

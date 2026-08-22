@@ -6,7 +6,12 @@ rust-version = "1.89"
 
 [dependencies]
 approx = "0.5.1"
+bigtools = { version = "0.5.8", default-features = false, features = ["write"] }
 clap = { version = "4.6.6", features = ["derive"] }
 noodles-core = "0.20.0"
 noodles-fasta = "0.66.0"
 rayon = "1.12"
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread"] }
+
+[dev-dependencies]
+bigtools = { version = "0.5.8", default-features = false, features = ["read"] }

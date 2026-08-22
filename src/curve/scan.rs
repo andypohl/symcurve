@@ -11,13 +11,16 @@ use crate::curve::iters::CurveIter;
 use crate::curve::matrix::RollType;
 use crate::fasta::RecordPiece;
 
-/// The curvature scores for one piece, with the position the piece started at.
+/// The curvature scores for one piece, with the positions they belong to.
 ///
-/// `start` is the 1-based position of the piece's first base in the original record, so
-/// callers can map scores back onto the record without consulting the piece again.
+/// `start` is the 1-based position of the piece's first base in the original record.
+/// `curve_start` is the 1-based position that `curves[0]` scores, which is further in by
+/// the pipeline's lead-in: the windows need context on both sides, so the first several
+/// bases of a piece get no score.
 #[derive(Debug, Clone)]
 pub struct PieceCurves {
     pub start: usize,
+    pub curve_start: usize,
     pub curves: Vec<f64>,
 }
 
@@ -35,6 +38,19 @@ pub struct CurveParams {
     pub curve_scale: f64,
 }
 
+impl CurveParams {
+    /// How many bases at each end of a piece receive no score.
+    ///
+    /// The rolling mean consumes `step_b` on each side and the distance window a further
+    /// `step_c`, plus one for the triplet. A piece of length `n` therefore yields
+    /// `n - 2 * lead_in()` scores, the first of which belongs to the base at offset
+    /// `lead_in()`. This matches the reference implementation, which indexes curvature
+    /// from `curvstep + stepone`.
+    pub fn lead_in(&self) -> usize {
+        self.step_b + self.step_c + 1
+    }
+}
+
 /// Score a single piece.
 pub fn score_piece(piece: &RecordPiece, params: &CurveParams) -> PieceCurves {
     // `bases` borrows straight out of the shared record, so no copy is made here.
@@ -46,8 +62,10 @@ pub fn score_piece(piece: &RecordPiece, params: &CurveParams) -> PieceCurves {
         params.curve_scale,
     )
     .collect();
+    let start = usize::from(piece.start);
     PieceCurves {
-        start: usize::from(piece.start),
+        start,
+        curve_start: start + params.lead_in(),
         curves,
     }
 }
@@ -134,6 +152,38 @@ mod tests {
         assert_eq!(scored.len(), 2);
         assert_eq!(scored[0].start, 1);
         assert_eq!(scored[1].start, 55);
+    }
+
+    #[test]
+    fn test_lead_in_matches_the_reference_convention() {
+        // The Perl reference scores indices curvstep+stepone .. len-curvstep-stepone,
+        // with stepone = step_b + 1 and curvstep = step_c. Check both the count and the
+        // position of the first score, since an off-by-one here shifts every value in
+        // the output file relative to the genome.
+        let p = params();
+        assert_eq!(p.lead_in(), 21); // step_b 5 + step_c 15 + 1, i.e. stepone 6 + curvstep 15
+        let unit = b"CCAACATTTTGACTTTTTGGGAGGGCACTAGCACCTATCTACCCTGAATC";
+        let mut seq = Vec::new();
+        for _ in 0..4 {
+            seq.extend_from_slice(unit);
+        }
+        let n = seq.len();
+        let pieces = split_seq_by_gaps(record_of(&seq));
+        let scored = score_pieces(&pieces, &p);
+        assert_eq!(scored.len(), 1);
+        assert_eq!(scored[0].curves.len(), n - 2 * p.lead_in());
+        assert_eq!(scored[0].start, 1);
+        assert_eq!(scored[0].curve_start, 1 + p.lead_in());
+    }
+
+    #[test]
+    fn test_curve_start_is_offset_from_the_piece_not_the_record() {
+        let seq = b"NNNNNCCAACATTTTGACTTTTTGGGAGGGCACTAGCACCTATCTACCCTGAATCCCAACATTTTGACTTTTTGGGAGGGCACTAGCACCTATCTACCCTGAATC";
+        let pieces = split_seq_by_gaps(record_of(seq));
+        assert_eq!(pieces.len(), 1);
+        let scored = score_pieces(&pieces, &params());
+        assert_eq!(scored[0].start, 6); // after the 5 leading Ns, 1-based
+        assert_eq!(scored[0].curve_start, 6 + params().lead_in());
     }
 
     #[test]
