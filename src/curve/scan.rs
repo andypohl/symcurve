@@ -51,17 +51,87 @@ impl CurveParams {
     }
 }
 
-/// Score a single piece.
-pub fn score_piece(piece: &RecordPiece, params: &CurveParams) -> PieceCurves {
-    // `bases` borrows straight out of the shared record, so no copy is made here.
-    let curves: Vec<f64> = CurveIter::new(
-        piece.bases().iter().copied(),
+/// The default number of scores one chunk produces.
+///
+/// Large enough that the per-chunk lead-in overhead is negligible, small enough that a
+/// handful in flight stay in cache and bound memory. Overridden from the memory budget.
+pub const DEFAULT_CHUNK_SCORES: usize = 1 << 20;
+
+/// One unit of independently scoreable work within a piece.
+///
+/// Chunks can be scored with fresh state and their results concatenated, because
+/// curvature is a distance between local averages: a chunk that starts partway into a
+/// piece has the wrong starting coordinate and the wrong accumulated twist, but the first
+/// is a translation of the traced path and the second a rotation of it, and neither
+/// changes the distances the scores are made of. Each chunk therefore reads `lead_in`
+/// bases of context beyond its output range at each end.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Chunk {
+    /// Offset into the piece where this chunk starts reading.
+    pub in_start: usize,
+    /// Offset into the piece where this chunk stops reading, exclusive.
+    pub in_end: usize,
+    /// Index into the piece's scores of this chunk's first score.
+    pub out_start: usize,
+}
+
+/// Divide a piece of `piece_len` bases into chunks producing `chunk_scores` scores each.
+///
+/// Returns no chunks when the piece is too short to produce any score at all.
+pub fn chunks(piece_len: usize, params: &CurveParams, chunk_scores: usize) -> Vec<Chunk> {
+    let lead = params.lead_in();
+    let out_len = piece_len.saturating_sub(2 * lead);
+    let chunk_scores = chunk_scores.max(1);
+    (0..out_len)
+        .step_by(chunk_scores)
+        .map(|out_start| {
+            let out_end = (out_start + chunk_scores).min(out_len);
+            Chunk {
+                // Scoring bases [p, q + 2*lead) yields exactly the scores [p, q).
+                in_start: out_start,
+                in_end: out_end + 2 * lead,
+                out_start,
+            }
+        })
+        .collect()
+}
+
+/// Score a run of bases with fresh state.
+pub fn score_bases(bases: &[u8], params: &CurveParams) -> Vec<f64> {
+    CurveIter::new(
+        bases.iter().copied(),
         params.roll_type,
         params.step_b,
         params.step_c,
         params.curve_scale,
     )
-    .collect();
+    .collect()
+}
+
+/// Score a single piece.
+pub fn score_piece(piece: &RecordPiece, params: &CurveParams) -> PieceCurves {
+    score_piece_chunked(piece, params, DEFAULT_CHUNK_SCORES)
+}
+
+/// Score a single piece, dividing it into chunks of the given size.
+///
+/// A record is often one enormous piece, so splitting only by piece leaves a chromosome
+/// on a single thread. Chunking within the piece both spreads that work and bounds how
+/// much of it is in memory at once.
+pub fn score_piece_chunked(
+    piece: &RecordPiece,
+    params: &CurveParams,
+    chunk_scores: usize,
+) -> PieceCurves {
+    // `bases` borrows straight out of the shared record, so no copy is made here.
+    let bases = piece.bases();
+    // collect() on an indexed parallel iterator preserves order, so the per-chunk score
+    // runs concatenate back into the piece's scores in position order.
+    let per_chunk: Vec<Vec<f64>> = chunks(bases.len(), params, chunk_scores)
+        .into_par_iter()
+        .map(|chunk| score_bases(&bases[chunk.in_start..chunk.in_end], params))
+        .collect();
+    let curves: Vec<f64> = per_chunk.concat();
     let start = usize::from(piece.start);
     PieceCurves {
         start,
@@ -184,6 +254,81 @@ mod tests {
         let scored = score_pieces(&pieces, &params());
         assert_eq!(scored[0].start, 6); // after the 5 leading Ns, 1-based
         assert_eq!(scored[0].curve_start, 6 + params().lead_in());
+    }
+
+    #[test]
+    fn test_chunk_ranges_tile_the_output_exactly() {
+        let p = params();
+        let lead = p.lead_in();
+        let piece_len = 1000usize;
+        let out_len = piece_len - 2 * lead;
+        let cs = 100usize;
+        let cs_list = chunks(piece_len, &p, cs);
+        assert_eq!(cs_list.len(), out_len.div_ceil(cs));
+        // Chunks must tile the output range with no gap and no overlap.
+        let mut expected_out = 0usize;
+        for c in &cs_list {
+            assert_eq!(c.out_start, expected_out);
+            // Scoring bases [in_start, in_end) yields in_end - in_start - 2*lead scores.
+            let produced = c.in_end - c.in_start - 2 * lead;
+            expected_out += produced;
+            assert!(c.in_end <= piece_len, "chunk reads past the piece");
+        }
+        assert_eq!(
+            expected_out, out_len,
+            "chunks do not cover the output exactly"
+        );
+    }
+
+    #[test]
+    fn test_short_piece_produces_no_chunks() {
+        let p = params();
+        for len in [0usize, 1, 2 * p.lead_in(), 2 * p.lead_in() + 1] {
+            let got = chunks(len, &p, 100);
+            let expect_scores = len.saturating_sub(2 * p.lead_in());
+            assert_eq!(got.is_empty(), expect_scores == 0, "len {len}");
+        }
+    }
+
+    #[test]
+    fn test_chunked_scoring_matches_unchunked() {
+        // The whole point of chunking is that it changes nothing about the answer.
+        // Chunk sizes are chosen to straddle the boundaries: one chunk, exact multiples,
+        // and sizes that leave a short final chunk.
+        let unit = b"CCAACATTTTGACTTTTTGGGAGGGCACTAGCACCTATCTACCCTGAATC";
+        let mut seq = Vec::new();
+        for _ in 0..40 {
+            seq.extend_from_slice(unit);
+        }
+        let pieces = split_seq_by_gaps(record_of(&seq));
+        let piece = &pieces[0];
+        let p = params();
+
+        let reference = score_bases(piece.bases(), &p);
+        assert!(reference.len() > 1000);
+
+        for chunk_scores in [
+            1usize,
+            7,
+            64,
+            500,
+            1000,
+            reference.len(),
+            reference.len() * 2,
+        ] {
+            let got = score_piece_chunked(piece, &p, chunk_scores);
+            assert_eq!(
+                got.curves.len(),
+                reference.len(),
+                "length differs at chunk_scores {chunk_scores}"
+            );
+            for (i, (a, b)) in reference.iter().zip(&got.curves).enumerate() {
+                // Not bit-identical: a chunk accumulates twist over a shorter run, so the
+                // rounding differs. The values are mathematically the same.
+                assert_relative_eq!(a, b, epsilon = 1e-9, max_relative = 1e-9);
+                let _ = i;
+            }
+        }
     }
 
     #[test]
