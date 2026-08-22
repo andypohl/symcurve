@@ -6,7 +6,7 @@
 //! convenient traversal and manipulation of the DNA data for the purpose of curvature calculation.
 use crate::curve::matrix;
 use std::collections::VecDeque;
-use std::f64::consts::PI;
+use std::f64::consts::{PI, TAU};
 use std::iter::Iterator;
 
 /// Represents the data for a triplet of nucleotides.
@@ -102,6 +102,13 @@ where
             };
             let tilt = matrix::lookup_by_index(&ixs, &matrix::TILT);
             self.twist_sum += twist;
+            // Only sin and cos of this are ever used, so keeping it in [0, TAU) changes
+            // nothing mathematically while stopping it from growing without bound. Left
+            // to accumulate it reaches ~1.5e8 radians over a chromosome, where an ulp is
+            // 3e-8 radians and the per-step rounding has compounded far past that.
+            if !(0.0..TAU).contains(&self.twist_sum) {
+                self.twist_sum = self.twist_sum.rem_euclid(TAU);
+            }
             // Create a TripletData instance and return it.
             let window = TripletData {
                 twist,
@@ -328,6 +335,14 @@ struct RollMeanData {
     y_bar: f64,
 }
 
+/// How many items may pass before the rolling sums are rebuilt from the buffer.
+///
+/// A running sum that is added to and subtracted from never sheds the rounding of the
+/// values that have left it, so its error ratchets upward. Rebuilding costs one pass over
+/// a window of about a hundred items, so amortised over this interval it is a fraction of
+/// a percent of the work.
+const ROLL_SUM_REBUILD_INTERVAL: usize = 1 << 16;
+
 /// Represents the data for a rolling mean of the x and y coordinates.
 ///
 /// The `RollMeanData` struct contains the weighted x and y means for a window of coordinates
@@ -341,12 +356,14 @@ struct RollMeanData {
 ///   2 * `step_size` + 1 is the size of the window.
 /// * `x_roll_sum`: The sum of the x coordinates in the current window.
 /// * `y_roll_sum`: The sum of the y coordinates in the current window.
+/// * `since_rebuild`: Items processed since the rolling sums were last rebuilt.
 struct RollMeanIter<I: Iterator> {
     inner: I,
     buffer: VecDeque<CoordsData>,
     step_size: usize,
     x_roll_sum: f64,
     y_roll_sum: f64,
+    since_rebuild: usize,
 }
 
 /// Implementation of the `Iterator` trait for `RollMeanIter`.
@@ -379,6 +396,12 @@ where
             }
         }
         if self.buffer.len() >= window_size {
+            self.since_rebuild += 1;
+            if self.since_rebuild >= ROLL_SUM_REBUILD_INTERVAL {
+                self.x_roll_sum = self.buffer.iter().map(|item| item.x).sum();
+                self.y_roll_sum = self.buffer.iter().map(|item| item.y).sum();
+                self.since_rebuild = 0;
+            }
             // get the fron/back items without removing them and adjust the roll sum
             let adj_x_roll_sum = self.x_roll_sum
                 - (0.5 * self.buffer.front().unwrap().x)
@@ -425,6 +448,7 @@ trait RollMeanIterator: Iterator<Item = CoordsData> + Sized {
             step_size,
             x_roll_sum: 0.0,
             y_roll_sum: 0.0,
+            since_rebuild: 0,
         }
     }
 }
@@ -1014,6 +1038,106 @@ mod tests {
             3.05865,
             epsilon = 1e-9
         );
+    }
+
+    #[test]
+    fn test_long_runs_agree_with_locally_computed_scores() {
+        // A score depends only on the bases within lead_in of it, so computing one at the
+        // far end of a long sequence must match computing it from a short slice around
+        // that position. Accumulated state is what breaks this: before twist was kept
+        // bounded and the rolling sums rebuilt, the same comparison drifted to 1.6e-10
+        // over this input, so the threshold here fails against that behaviour.
+        let bases = *b"ACGT";
+        let mut x: u64 = 0x5555AAAA33337777;
+        let n = 300_000usize;
+        let (step_b, step_c) = (5usize, 15usize);
+        let lead = step_b + step_c + 1;
+        let seq: Vec<u8> = (0..n)
+            .map(|_| {
+                x ^= x << 13;
+                x ^= x >> 7;
+                x ^= x << 17;
+                bases[(x % 4) as usize]
+            })
+            .collect();
+
+        let score = |s: &[u8]| -> Vec<f64> {
+            CurveIter::new(
+                s.iter().copied(),
+                matrix::RollType::Simple,
+                step_b,
+                step_c,
+                0.33335,
+            )
+            .collect()
+        };
+
+        let long = score(&seq);
+        for &p in &[long.len() - 1, long.len() / 2, long.len() - 1000] {
+            let local = score(&seq[p..p + 2 * lead + 1]);
+            let rel = (long[p] - local[0]).abs() / long[p].abs().max(1e-12);
+            assert!(
+                rel < 1e-11,
+                "score {p} drifted: long {} vs local {} (rel {rel:.3e})",
+                long[p],
+                local[0]
+            );
+        }
+    }
+
+    #[test]
+    fn test_rolling_sums_stay_equal_to_a_fresh_sum() {
+        // Run past the rebuild interval so the rebuild path is exercised, and check the
+        // rolling means still match ones computed directly over each window.
+        let bases = *b"ACGT";
+        let mut x: u64 = 0x0F1E2D3C4B5A6978;
+        let n = ROLL_SUM_REBUILD_INTERVAL + 5_000;
+        let seq: Vec<u8> = (0..n)
+            .map(|_| {
+                x ^= x << 13;
+                x ^= x >> 7;
+                x ^= x << 17;
+                bases[(x % 4) as usize]
+            })
+            .collect();
+
+        let step_size = 5usize;
+        let window = 2 * step_size + 1;
+        let coords: Vec<CoordsData> = seq
+            .iter()
+            .copied()
+            .triplet_windows_iter(matrix::RollType::Simple)
+            .coords_iter()
+            .collect();
+        let means: Vec<RollMeanData> = seq
+            .iter()
+            .copied()
+            .triplet_windows_iter(matrix::RollType::Simple)
+            .coords_iter()
+            .roll_mean_iter(step_size)
+            .collect();
+
+        assert!(means.len() > ROLL_SUM_REBUILD_INTERVAL);
+        for &i in &[
+            0usize,
+            1,
+            ROLL_SUM_REBUILD_INTERVAL - 1,
+            ROLL_SUM_REBUILD_INTERVAL + 1,
+            means.len() - 1,
+        ] {
+            // The trapezoidal mean: interior at full weight, the two ends at half.
+            let slice = &coords[i..i + window];
+            let x_sum: f64 = slice.iter().map(|c| c.x).sum::<f64>()
+                - 0.5 * slice[0].x
+                - 0.5 * slice[window - 1].x;
+            let expected = x_sum / (window as f64 - 1.0);
+            assert_relative_eq!(
+                means[i].x_bar,
+                expected,
+                epsilon = 1e-9,
+                max_relative = 1e-12
+            );
+        }
     }
 
     #[test]
