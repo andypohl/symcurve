@@ -7,30 +7,36 @@
 use crate::curve::matrix;
 use std::collections::VecDeque;
 use std::f64::consts::{PI, TAU};
-use std::iter::Iterator;
+use std::iter::{FusedIterator, Iterator};
 
-/// Represents the data for a triplet of nucleotides.
+/// How many items a sliding window will still yield.
 ///
-/// This struct contains the twist, roll, and tilt values for a triplet of nucleotides, as well as
-/// the deltas `dx` and `dy` and the roll type. *`roll_type` may be removed from this struct in the
-/// future to accommodate more-general matrix options.*
+/// A window of `window` items over `remaining` inputs yields `remaining - window + 1`, and
+/// `buffered` items are already held. Reported so that collecting into a `Vec` can
+/// allocate once rather than growing repeatedly, which matters at genome scale.
+fn window_size_hint(
+    inner: (usize, Option<usize>),
+    buffered: usize,
+    window: usize,
+) -> (usize, Option<usize>) {
+    let available = |n: usize| (n + buffered + 1).saturating_sub(window);
+    (available(inner.0), inner.1.map(available))
+}
+
+/// The step a triplet of nucleotides contributes to the traced path.
+///
+/// The twist, roll and tilt looked up for the triplet are combined into this step as it is
+/// produced; only the step itself is carried forward, since nothing downstream reads the
+/// individual parameters.
 ///
 /// # Fields
 ///
-/// * `twist`: The twist value for the triplet.
-/// * `roll`: The roll value for the triplet.
-/// * `tilt`: The tilt value for the triplet.
-/// * `dx`: The delta x value, calculated based on the roll and tilt.
-/// * `dy`: The delta y value, calculated based on the roll and tilt.
-/// * `roll_type`: The type of roll (either simple or activated).
-#[derive(Clone, Debug)]
+/// * `dx`: The delta x value, calculated from the roll, tilt and accumulated twist.
+/// * `dy`: The delta y value, calculated from the roll, tilt and accumulated twist.
+#[derive(Clone, Copy, Debug)]
 struct TripletData {
-    twist: f64,
-    roll: f64,
-    tilt: f64,
     dx: f64,
     dy: f64,
-    roll_type: matrix::RollType,
 }
 
 /// An iterator-wrapping struct that yields TripletData from an inner `u8` iterator.
@@ -50,11 +56,15 @@ struct TripletData {
 /// * `inner`: The inner iterator that yields `u8`.
 /// * `twist_sum`: The sum of the twist values for the current triplet.
 /// * `roll_type`: The current roll type.
-struct TripletWindowsIter<I: Iterator> {
+struct TripletWindowsIter<I> {
     base_buffer: VecDeque<u8>,
     inner: I,
     twist_sum: f64,
     roll_type: matrix::RollType,
+    /// Set once the inner iterator has returned None, so it is not polled again.
+    /// Iterator only guarantees anything about repeated calls after exhaustion for
+    /// iterators that are Fused, and the inner one need not be.
+    inner_done: bool,
 }
 
 /// Implementation of the `Iterator` trait for `TripletWindowsIter` struct.
@@ -78,11 +88,10 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         // Fill the buffer with the next three items from the inner iterator.
-        while self.base_buffer.len() < matrix::TRIPLET_SIZE {
-            if let Some(item) = self.inner.next() {
-                self.base_buffer.push_back(item);
-            } else {
-                break;
+        while !self.inner_done && self.base_buffer.len() < matrix::TRIPLET_SIZE {
+            match self.inner.next() {
+                Some(item) => self.base_buffer.push_back(item),
+                None => self.inner_done = true,
             }
         }
         // When the buffer is full, calculate the twist, roll, and tilt values.
@@ -111,12 +120,8 @@ where
             }
             // Create a TripletData instance and return it.
             let window = TripletData {
-                twist,
-                roll,
-                tilt,
                 dx: (roll * self.twist_sum.sin()) + (tilt * (self.twist_sum + PI / 2.0).sin()),
                 dy: (roll * self.twist_sum.cos()) + (tilt * (self.twist_sum + PI / 2.0).cos()),
-                roll_type: self.roll_type,
             };
             self.base_buffer.pop_front();
             Some(window)
@@ -124,7 +129,17 @@ where
             None
         }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        window_size_hint(
+            self.inner.size_hint(),
+            self.base_buffer.len(),
+            matrix::TRIPLET_SIZE,
+        )
+    }
 }
+
+impl<I> FusedIterator for TripletWindowsIter<I> where I: Iterator<Item = u8> {}
 
 /// A trait for `u8` Iterators to yield `TripletData`.
 ///
@@ -148,34 +163,29 @@ trait TripletWindowsIterator: Iterator<Item = u8> + Sized {
             inner: self,
             twist_sum: 0.0,
             roll_type,
+            inner_done: false,
         }
     }
 }
 
 impl<I: Iterator<Item = u8>> TripletWindowsIterator for I {}
 
-/// Represents the coordinates and associated data for a triplet of nucleotides.
-///
-/// `CoordsData` contains the x and y coordinates calculated from the `TripletData`, as well as
-/// the `TripletData` itself. The `TripletData` is optional, but is only None at the very end
-/// of the associated iterator.
+/// A point on the path traced by the accumulated steps.
 ///
 /// # Fields
 ///
-/// * `triplet_data`: The `TripletData` associated with these coordinates. This is `None` if there
-///   is no associated data.
 /// * `x`: The x coordinate.
 /// * `y`: The y coordinate.
+#[derive(Clone, Copy, Debug)]
 struct CoordsData {
-    triplet_data: Option<TripletData>,
     x: f64,
     y: f64,
 }
 
 impl CoordsData {
     /// Constructor for `CoordsData`.
-    fn new(triplet_data: Option<TripletData>, x: f64, y: f64) -> Self {
-        CoordsData { triplet_data, x, y }
+    fn new(x: f64, y: f64) -> Self {
+        CoordsData { x, y }
     }
 }
 
@@ -209,87 +219,62 @@ struct CoordsIter<I: Iterator> {
     prev_dy: f64,
 }
 
-impl<I: Iterator<Item = TripletData>> CoordsIter<I> {
-    /// Constructor for `CoordsIter`.
-    fn new(inner: I) -> Self {
-        CoordsIter {
-            inner,
-            head: false,
-            tail: false,
-            prev_x_coord: 0.0,
-            prev_y_coord: 0.0,
-            prev_dx: 0.0,
-            prev_dy: 0.0,
-        }
-    }
-}
-
 impl<I> Iterator for CoordsIter<I>
 where
     I: Iterator<Item = TripletData>,
 {
     type Item = CoordsData;
 
-    /// Implementation of `Iterator` trait for `CoordsIter` struct.
+    /// Advance the traced path by one step.
     ///
-    /// This method first tries to get the next `TripletData` from the inner iterator. If there is a next item,
-    /// it updates the previous deltas with the deltas from the current item and creates a new `CoordsData` with
-    /// the current `TripletData`.
-    ///
-    /// If there are no more items in the inner iterator it yields one more new `CoordsData` without a
-    /// `TripletData` but with `x` and `y` filled in.
-    ///
-    /// # Returns
-    ///
-    /// A `Some(CoordsData)` with the next coordinates and `TripletData`, or `None` if there are no more items.
+    /// The first point the path would yield is the origin before any step has been
+    /// applied, which carries no information, so it is skipped. Once the inner iterator
+    /// runs out one final point is emitted, applying the last step.
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(triplet_data) = self.inner.next() {
-            // Read the deltas out before moving the data into the CoordsData, rather
-            // than cloning the whole struct to keep a copy around.
-            let (dx, dy) = (triplet_data.dx, triplet_data.dy);
-            let result = Some(self.create_coords_data(Some(triplet_data)));
-            self.prev_dx = dx;
-            self.prev_dy = dy;
-            if !self.head {
-                self.head = true;
-                return self.next();
+        loop {
+            match self.inner.next() {
+                Some(triplet_data) => {
+                    let point = self.step();
+                    self.prev_dx = triplet_data.dx;
+                    self.prev_dy = triplet_data.dy;
+                    if self.head {
+                        return Some(point);
+                    }
+                    // Discard the origin and go round again rather than recursing.
+                    self.head = true;
+                }
+                None if !self.tail => {
+                    self.tail = true;
+                    return Some(self.step());
+                }
+                None => return None,
             }
-            result
-        } else if !self.tail {
-            self.tail = true;
-            Some(self.create_coords_data(None))
-        } else {
-            None
         }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        // One point is dropped from the front and one added at the end, so the count
+        // matches the inner iterator's, give or take what has already been consumed.
+        let (lower, upper) = self.inner.size_hint();
+        let pending = usize::from(!self.tail);
+        (
+            lower.saturating_add(pending).saturating_sub(1),
+            upper.and_then(|u| u.checked_add(pending)),
+        )
+    }
 }
+
+impl<I> FusedIterator for CoordsIter<I> where I: Iterator<Item = TripletData> {}
 
 impl<I> CoordsIter<I>
 where
     I: Iterator<Item = TripletData>,
 {
-    /// Creates a `CoordsData` instance from an optional `TripletData`.
-    ///
-    /// Helper to `CoordsIter::next()` that creates a `CoordsData` instance from the current
-    /// `TripletData` and the previous coordinates.
-    ///
-    /// # Arguments
-    ///
-    /// * `triplet_data` - An optional `TripletData` that will be included in the created `CoordsData`.
-    ///
-    /// # Returns
-    ///
-    /// A `CoordsData` instance with the calculated coordinates and the given `TripletData`.
-    fn create_coords_data(&mut self, triplet_data: Option<TripletData>) -> CoordsData {
-        let x_coord = self.prev_x_coord + self.prev_dx;
-        let y_coord = self.prev_y_coord + self.prev_dy;
-        self.prev_x_coord = x_coord;
-        self.prev_y_coord = y_coord;
-        CoordsData {
-            triplet_data,
-            x: x_coord,
-            y: y_coord,
-        }
+    /// Apply the previous step to the current position and return the point reached.
+    fn step(&mut self) -> CoordsData {
+        self.prev_x_coord += self.prev_dx;
+        self.prev_y_coord += self.prev_dy;
+        CoordsData::new(self.prev_x_coord, self.prev_y_coord)
     }
 }
 
@@ -357,13 +342,15 @@ const ROLL_SUM_REBUILD_INTERVAL: usize = 1 << 16;
 /// * `x_roll_sum`: The sum of the x coordinates in the current window.
 /// * `y_roll_sum`: The sum of the y coordinates in the current window.
 /// * `since_rebuild`: Items processed since the rolling sums were last rebuilt.
-struct RollMeanIter<I: Iterator> {
+struct RollMeanIter<I> {
     inner: I,
     buffer: VecDeque<CoordsData>,
     step_size: usize,
     x_roll_sum: f64,
     y_roll_sum: f64,
     since_rebuild: usize,
+    /// Set once the inner iterator has returned None, so it is not polled again.
+    inner_done: bool,
 }
 
 /// Implementation of the `Iterator` trait for `RollMeanIter`.
@@ -386,13 +373,14 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         // Fill the buffer with the next three items from the inner iterator.
         let window_size = self.step_size * 2 + 1;
-        while self.buffer.len() < window_size {
-            if let Some(item) = self.inner.next() {
-                self.x_roll_sum += item.x;
-                self.y_roll_sum += item.y;
-                self.buffer.push_back(item);
-            } else {
-                break;
+        while !self.inner_done && self.buffer.len() < window_size {
+            match self.inner.next() {
+                Some(item) => {
+                    self.x_roll_sum += item.x;
+                    self.y_roll_sum += item.y;
+                    self.buffer.push_back(item);
+                }
+                None => self.inner_done = true,
             }
         }
         if self.buffer.len() >= window_size {
@@ -420,7 +408,17 @@ where
             None
         }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        window_size_hint(
+            self.inner.size_hint(),
+            self.buffer.len(),
+            self.step_size * 2 + 1,
+        )
+    }
 }
+
+impl<I> FusedIterator for RollMeanIter<I> where I: Iterator<Item = CoordsData> {}
 
 /// A trait for iterators that can compute a rolling mean of `CoordsData`.
 ///
@@ -449,6 +447,7 @@ trait RollMeanIterator: Iterator<Item = CoordsData> + Sized {
             x_roll_sum: 0.0,
             y_roll_sum: 0.0,
             since_rebuild: 0,
+            inner_done: false,
         }
     }
 }
@@ -467,10 +466,12 @@ impl<I: Iterator<Item = CoordsData>> RollMeanIterator for I {}
 /// * `buffer`: A buffer that stores 2 * `curve_step_size` + 1 items from the inner iterator.
 ///
 /// * `curve_step_size`: The distance from the midpoint base in the window.  
-struct EucDistIter<I: Iterator> {
+struct EucDistIter<I> {
     inner: I,
     buffer: VecDeque<RollMeanData>,
     curve_step_size: usize,
+    /// Set once the inner iterator has returned None, so it is not polled again.
+    inner_done: bool,
 }
 
 impl<I> Iterator for EucDistIter<I>
@@ -490,11 +491,10 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         // Fill the buffer with the next three items from the inner iterator.
         let window_size = self.curve_step_size * 2 + 1;
-        while self.buffer.len() < window_size {
-            if let Some(item) = self.inner.next() {
-                self.buffer.push_back(item);
-            } else {
-                break;
+        while !self.inner_done && self.buffer.len() < window_size {
+            match self.inner.next() {
+                Some(item) => self.buffer.push_back(item),
+                None => self.inner_done = true,
             }
         }
         if self.buffer.len() >= window_size {
@@ -508,7 +508,17 @@ where
             None
         }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        window_size_hint(
+            self.inner.size_hint(),
+            self.buffer.len(),
+            self.curve_step_size * 2 + 1,
+        )
+    }
 }
+
+impl<I> FusedIterator for EucDistIter<I> where I: Iterator<Item = RollMeanData> {}
 
 trait EucDistIterator: Iterator<Item = RollMeanData> + Sized {
     fn euc_dist_iter(self, curve_step_size: usize) -> EucDistIter<Self> {
@@ -516,6 +526,7 @@ trait EucDistIterator: Iterator<Item = RollMeanData> + Sized {
             inner: self,
             buffer: VecDeque::new(),
             curve_step_size,
+            inner_done: false,
         }
     }
 }
@@ -542,7 +553,14 @@ impl<I: Iterator<Item = u8>> Iterator for CurveIter<I> {
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next().map(|x| x * self.curve_scale)
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        // Scaling is one-to-one, so the stack below reports the count unchanged.
+        self.inner.size_hint()
+    }
 }
+
+impl<I: Iterator<Item = u8>> FusedIterator for CurveIter<I> {}
 
 /// Construct a `CurveIter` from an iterator that yields `u8`.
 ///
@@ -773,7 +791,7 @@ mod tests {
         x_values
             .into_iter()
             .zip(y_values)
-            .map(|(x, y)| CoordsData::new(None, x, y))
+            .map(|(x, y)| CoordsData::new(x, y))
             .collect()
     }
 
@@ -1015,19 +1033,32 @@ mod tests {
     #[test]
     fn test_roll_type_selects_the_matching_matrix() {
         // Guards the pairing that the ROLL_SIMPLE / ROLL_ACTIVE doc comments describe.
-        // The two matrices disagree at CCA (0.7 simple, 3.05865 active), so this fails
-        // if the constants are ever swapped to "fix" a mismatch with their docs.
+        // The two matrices disagree at CCA (0.7 simple, 3.05865 active), so this fails if
+        // the constants are ever swapped to "fix" a mismatch with their docs.
+        //
+        // Checked through dx rather than a stored roll value: after one triplet the
+        // accumulated twist is a single TWIST entry, so dx is roll * sin(twist), which
+        // pins the routing and the step formula together.
         let cca = b"CCA";
-        let roll_for = |roll_type: matrix::RollType| -> f64 {
+        let twist = matrix::matrix_lookup(cca, &matrix::TWIST).unwrap();
+        let dx_for = |roll_type: matrix::RollType| -> f64 {
             cca.iter()
                 .copied()
                 .triplet_windows_iter(roll_type)
                 .next()
                 .unwrap()
-                .roll
+                .dx
         };
-        assert_relative_eq!(roll_for(matrix::RollType::Simple), 0.7, epsilon = 1e-9);
-        assert_relative_eq!(roll_for(matrix::RollType::Active), 3.05865, epsilon = 1e-9);
+        assert_relative_eq!(
+            dx_for(matrix::RollType::Simple),
+            0.7 * twist.sin(),
+            epsilon = 1e-12
+        );
+        assert_relative_eq!(
+            dx_for(matrix::RollType::Active),
+            3.05865 * twist.sin(),
+            epsilon = 1e-12
+        );
         assert_relative_eq!(
             matrix::matrix_lookup(cca, &matrix::ROLL_SIMPLE).unwrap(),
             0.7,
@@ -1137,6 +1168,111 @@ mod tests {
                 epsilon = 1e-9,
                 max_relative = 1e-12
             );
+        }
+    }
+
+    #[test]
+    fn test_size_hint_is_accurate_at_every_layer() {
+        // A size_hint that lies is worse than none, since callers preallocate from it.
+        // Check each layer against the count it actually produces, before and partway
+        // through iteration.
+        let seq = b"CCAACATTTTGACTTTTTGGGAGGGCACTAGCACCTATCTACCCTGAATC";
+        let (step_b, step_c) = (5usize, 15usize);
+
+        let triplets = seq
+            .iter()
+            .copied()
+            .triplet_windows_iter(matrix::RollType::Simple);
+        let (lo, hi) = triplets.size_hint();
+        let actual = triplets.count();
+        assert_eq!(actual, seq.len() - 2);
+        assert!(
+            lo <= actual && hi == Some(actual),
+            "triplets: {lo}..{hi:?} vs {actual}"
+        );
+
+        let coords = seq
+            .iter()
+            .copied()
+            .triplet_windows_iter(matrix::RollType::Simple)
+            .coords_iter();
+        let (lo, hi) = coords.size_hint();
+        let actual = coords.count();
+        assert!(
+            lo <= actual && hi.is_some_and(|h| h >= actual),
+            "coords: {lo}..{hi:?} vs {actual}"
+        );
+
+        let means = seq
+            .iter()
+            .copied()
+            .triplet_windows_iter(matrix::RollType::Simple)
+            .coords_iter()
+            .roll_mean_iter(step_b);
+        let (lo, hi) = means.size_hint();
+        let actual = means.count();
+        assert!(
+            lo <= actual && hi.is_some_and(|h| h >= actual),
+            "means: {lo}..{hi:?} vs {actual}"
+        );
+
+        let curves = CurveIter::new(
+            seq.iter().copied(),
+            matrix::RollType::Simple,
+            step_b,
+            step_c,
+            0.33335,
+        );
+        let (lo, hi) = curves.size_hint();
+        let collected: Vec<f64> = curves.collect();
+        assert_eq!(collected.len(), seq.len() - 2 * (step_b + step_c + 1));
+        assert!(
+            lo <= collected.len() && hi.is_some_and(|h| h >= collected.len()),
+            "curves: {lo}..{hi:?} vs {}",
+            collected.len()
+        );
+
+        // Partway through, the hint must still bound what is left.
+        let mut it = CurveIter::new(
+            seq.iter().copied(),
+            matrix::RollType::Simple,
+            step_b,
+            step_c,
+            0.33335,
+        );
+        it.next();
+        it.next();
+        let (lo, hi) = it.size_hint();
+        let left = it.count();
+        assert!(
+            lo <= left && hi.is_some_and(|h| h >= left),
+            "partway: {lo}..{hi:?} vs {left}"
+        );
+    }
+
+    #[test]
+    fn test_iterators_keep_returning_none_after_exhaustion() {
+        // FusedIterator is a promise, and the layers previously kept polling an inner
+        // iterator that had already finished, which Iterator does not define for a
+        // non-fused source.
+        let seq = b"CCAACATTTTGACTTTTTGGGAGGG";
+        let mut curves =
+            CurveIter::new(seq.iter().copied(), matrix::RollType::Simple, 2, 2, 0.33335);
+        while curves.next().is_some() {}
+        for _ in 0..5 {
+            assert!(curves.next().is_none(), "yielded again after finishing");
+        }
+
+        // Too short to produce anything at all: still None, repeatedly.
+        let mut empty = CurveIter::new(
+            b"ACG".iter().copied(),
+            matrix::RollType::Simple,
+            5,
+            15,
+            0.33335,
+        );
+        for _ in 0..5 {
+            assert!(empty.next().is_none());
         }
     }
 

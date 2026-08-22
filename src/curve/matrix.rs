@@ -81,16 +81,30 @@ pub const ROLL_SIMPLE: NucMatrix = [
     ],
 ];
 
-#[derive(Debug)]
-pub struct MatrixLookupError {
-    details: String,
+/// Why a matrix lookup could not be performed.
+///
+/// An enum rather than a message string: the two cases are distinct, callers can tell
+/// them apart, and neither needs an allocation to report.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MatrixLookupError {
+    /// The slice handed in was not exactly three bases long.
+    WrongLength(usize),
+    /// A base was not A, C, G or T in either case.
+    UnknownBase(u8),
 }
 
 impl fmt::Display for MatrixLookupError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Error: {}", self.details)
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::WrongLength(n) => write!(f, "triplet must be of length 3, got {n}"),
+            Self::UnknownBase(base) => {
+                write!(f, "unrecognized nucleotide {:?}", *base as char)
+            }
+        }
     }
 }
+
+impl std::error::Error for MatrixLookupError {}
 
 /// Which ROLL matrix a curvature calculation should use.
 #[derive(Debug, Clone, Copy)]
@@ -128,7 +142,7 @@ const NUC_TABLE: [u8; 256] = {
 ///
 /// Returns `None` for anything that is not A, C, G, or T.
 #[inline]
-pub(crate) fn nuc_index(base: u8) -> Option<usize> {
+pub fn nuc_index(base: u8) -> Option<usize> {
     match NUC_TABLE[base as usize] {
         NOT_A_BASE => None,
         ix => Some(ix as usize),
@@ -145,19 +159,19 @@ pub(crate) fn nuc_index(base: u8) -> Option<usize> {
 ///
 /// Returns a `MatrixLookupError` naming the offending base if any of the three is not
 /// A, C, G, or T.
-pub(crate) fn triplet_indices(triplet: &[u8; 3]) -> Result<[usize; 3], MatrixLookupError> {
-    let mut ixs = [0usize; 3];
+pub fn triplet_indices(
+    triplet: &[u8; TRIPLET_SIZE],
+) -> Result<[usize; TRIPLET_SIZE], MatrixLookupError> {
+    let mut ixs = [0usize; TRIPLET_SIZE];
     for (slot, &base) in ixs.iter_mut().zip(triplet.iter()) {
-        *slot = nuc_index(base).ok_or_else(|| MatrixLookupError {
-            details: format!("unrecognized nucleotide {:?}", base as char),
-        })?;
+        *slot = nuc_index(base).ok_or(MatrixLookupError::UnknownBase(base))?;
     }
     Ok(ixs)
 }
 
 /// Reads a value out of a matrix using indices already decoded by `triplet_indices`.
 #[inline]
-pub(crate) fn lookup_by_index(ixs: &[usize; 3], matrix: &NucMatrix) -> f64 {
+pub fn lookup_by_index(ixs: &[usize; TRIPLET_SIZE], matrix: &NucMatrix) -> f64 {
     matrix[ixs[0]][ixs[1]][ixs[2]]
 }
 
@@ -182,10 +196,10 @@ pub(crate) fn lookup_by_index(ixs: &[usize; 3], matrix: &NucMatrix) -> f64 {
 ///
 /// Returns a `MatrixLookupError` if the triplet is not of length 3, or if it contains a base
 /// that is not A, C, G, or T. These are reported as distinct errors rather than being conflated.
-pub(crate) fn matrix_lookup(triplet: &[u8], matrix: &NucMatrix) -> Result<f64, MatrixLookupError> {
-    let triplet: &[u8; 3] = triplet.try_into().map_err(|_| MatrixLookupError {
-        details: format!("triplet must be of length 3, got {}", triplet.len()),
-    })?;
+pub fn matrix_lookup(triplet: &[u8], matrix: &NucMatrix) -> Result<f64, MatrixLookupError> {
+    let triplet: &[u8; TRIPLET_SIZE] = triplet
+        .try_into()
+        .map_err(|_| MatrixLookupError::WrongLength(triplet.len()))?;
     Ok(lookup_by_index(&triplet_indices(triplet)?, matrix))
 }
 
@@ -256,9 +270,22 @@ mod tests {
 
     #[test]
     fn test_matrix_lookup_error_display() {
-        let error = MatrixLookupError {
-            details: "Test error details".to_string(),
-        };
-        assert_eq!(format!("{}", error), "Error: Test error details");
+        assert_eq!(
+            MatrixLookupError::WrongLength(2).to_string(),
+            "triplet must be of length 3, got 2"
+        );
+        assert_eq!(
+            MatrixLookupError::UnknownBase(b'N').to_string(),
+            "unrecognized nucleotide 'N'"
+        );
+    }
+
+    #[test]
+    fn test_matrix_lookup_error_is_a_std_error() {
+        // So it composes with `?` into Box<dyn Error>, anyhow and the like.
+        fn takes_error<E: std::error::Error>(_: E) {}
+        takes_error(MatrixLookupError::UnknownBase(b'N'));
+        let boxed: Box<dyn std::error::Error> = MatrixLookupError::WrongLength(4).into();
+        assert!(boxed.to_string().contains("length 3"));
     }
 }
