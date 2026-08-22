@@ -13,12 +13,15 @@ fn tmp_path(name: &str) -> std::path::PathBuf {
 
 /// A record with a soft-masked stretch, an N gap and an ambiguity code, so the run
 /// exercises gap splitting rather than a single clean piece.
-fn write_fasta() -> std::path::PathBuf {
+///
+/// `tag` must be unique per test: these run in parallel threads of one process, so a
+/// shared path would let one test delete the input another is still reading.
+fn write_fasta(tag: &str) -> std::path::PathBuf {
     let unit = "CCAACATTTTGACTTTTTGGGAGGGCACTAGCACCTATCTACCCTGAATC";
     let piece_a = unit.repeat(3);
     let piece_b = unit.repeat(2).to_lowercase();
     let piece_c = unit.repeat(2);
-    let path = tmp_path("in.fa");
+    let path = tmp_path(&format!("{tag}-in.fa"));
     std::fs::write(&path, format!(">chrIT\n{piece_a}NNNN{piece_b}R{piece_c}\n")).unwrap();
     path
 }
@@ -34,8 +37,8 @@ fn test_app_runs() {
 
 #[test]
 fn test_end_to_end_bedgraph() {
-    let input = write_fasta();
-    let out = tmp_path("out.bedGraph");
+    let input = write_fasta("bedgraph");
+    let out = tmp_path("bedgraph-out.bedGraph");
     let output = Command::new(EXE)
         .args([input.to_str().unwrap(), out.to_str().unwrap(), "--verbose"])
         .output()
@@ -70,8 +73,8 @@ fn test_end_to_end_bedgraph() {
 
 #[test]
 fn test_end_to_end_bigwig() {
-    let input = write_fasta();
-    let out = tmp_path("out.bw");
+    let input = write_fasta("bigwig");
+    let out = tmp_path("bigwig-out.bw");
     let status = Command::new(EXE)
         .args([input.to_str().unwrap(), out.to_str().unwrap()])
         .status()
@@ -89,8 +92,8 @@ fn test_end_to_end_bigwig() {
 
 #[test]
 fn test_unknown_output_extension_is_rejected() {
-    let input = write_fasta();
-    let out = tmp_path("out.txt");
+    let input = write_fasta("reject");
+    let out = tmp_path("reject-out.txt");
     let output = Command::new(EXE)
         .args([input.to_str().unwrap(), out.to_str().unwrap()])
         .output()
