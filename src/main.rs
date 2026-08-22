@@ -10,6 +10,10 @@ use symcurve::curve::scan::{CurveParams, DEFAULT_CHUNK_SCORES};
 use symcurve::output::{self, OutputFormat};
 use symcurve::stream;
 
+/// Upper bound on how much sequence to hold when reading through an index. Past this a
+/// larger window costs memory without saving meaningful work.
+const MAX_WINDOW_BASES: usize = 64 << 20;
+
 fn main() {
     if let Err(err) = run() {
         // Print Display rather than Debug: returning the error from main would render it
@@ -38,14 +42,43 @@ fn run() -> Result<(), Box<dyn Error>> {
         );
     }
 
+    // An index lets each record be read a window at a time, which lowers the floor set
+    // by the largest record, and supplies chromosome sizes without a pass over the file.
+    let index = stream::load_index(&args.input)?;
+    let window_bases = args.max_memory.window_bases(MAX_WINDOW_BASES);
+    if args.verbose {
+        match &index {
+            Some(_) => eprintln!(
+                "using {}.fai: reading in windows of {window_bases} bases",
+                args.input.display()
+            ),
+            None => eprintln!(
+                "no {}.fai found: reading whole records, so the largest record sets the floor",
+                args.input.display()
+            ),
+        }
+    }
+
     let input = args.input.clone();
     let verbose = args.verbose;
+    let index_for_run = index.clone();
     let produce = move |emit: &mut dyn FnMut(&str, usize, f64) -> std::io::Result<()>| {
-        let stats = stream::for_each_score(&input, &params, chunk_scores, threads, emit)?;
+        let stats = match &index_for_run {
+            Some(index) => stream::for_each_score_indexed(
+                &input,
+                index,
+                &params,
+                chunk_scores,
+                threads,
+                window_bases,
+                emit,
+            )?,
+            None => stream::for_each_score(&input, &params, chunk_scores, threads, emit)?,
+        };
         if verbose {
             eprintln!(
-                "{} records, {} pieces, {} scores; largest record {} bases",
-                stats.records, stats.pieces, stats.scores, stats.longest_record
+                "{} records, {} scores; largest record {} bases",
+                stats.records, stats.scores, stats.longest_record
             );
         }
         Ok(())
@@ -56,8 +89,12 @@ fn run() -> Result<(), Box<dyn Error>> {
         OutputFormat::BigWig => {
             // The header needs every chromosome size before any value, so names and
             // lengths are read in a first pass that keeps no sequence.
-            let sizes = stream::chrom_sizes(&args.input)
-                .map_err(|e| format!("cannot read {}: {e}", args.input.display()))?;
+            let sizes = match &index {
+                // The index already carries every name and length.
+                Some(index) => stream::chrom_sizes_from_index(index),
+                None => stream::chrom_sizes(&args.input)
+                    .map_err(|e| format!("cannot read {}: {e}", args.input.display()))?,
+            };
             // Keep roughly a chunk's worth of values queued: enough to keep the writer
             // fed, bounded so a slow writer cannot let the queue grow without limit.
             let queue_depth = chunk_scores.min(1 << 16);

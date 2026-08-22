@@ -42,6 +42,24 @@ impl MemoryBudget {
     }
 }
 
+/// Never read a window smaller than this many bases; tiny windows re-read overlap out of
+/// proportion to the sequence they cover.
+const MIN_WINDOW_BASES: usize = 1 << 20;
+
+impl MemoryBudget {
+    /// How many bases of sequence to hold at once when reading through an index.
+    ///
+    /// The window is the sequence side of the footprint, so it gets a share of the budget
+    /// separate from the score buffers, and is capped because past a point a larger
+    /// window only costs memory without saving reads.
+    pub fn window_bases(&self, cap: usize) -> usize {
+        // A quarter of the budget: the scores buffered from a window dominate it, at
+        // eight bytes per base against the one byte the base itself takes.
+        let share = (self.0 / 4) as usize;
+        share.clamp(MIN_WINDOW_BASES, cap)
+    }
+}
+
 impl fmt::Display for MemoryBudget {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let b = self.0;
@@ -172,6 +190,23 @@ mod tests {
         // A tiny budget floors rather than collapsing to nothing.
         let tiny: MemoryBudget = "1K".parse().unwrap();
         assert_eq!(tiny.chunk_scores(16, cap), MIN_CHUNK_SCORES);
+    }
+
+    #[test]
+    fn test_window_bases_scales_and_clamps() {
+        let cap = 64 << 20;
+        let big: MemoryBudget = "8G".parse().unwrap();
+        assert_eq!(big.window_bases(cap), cap, "a large budget hits the cap");
+
+        let mid: MemoryBudget = "64M".parse().unwrap();
+        assert_eq!(mid.window_bases(cap), (64 * MI / 4) as usize);
+
+        let tiny: MemoryBudget = "1K".parse().unwrap();
+        assert_eq!(
+            tiny.window_bases(cap),
+            MIN_WINDOW_BASES,
+            "floors rather than collapsing"
+        );
     }
 
     #[test]
