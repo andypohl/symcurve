@@ -5,6 +5,7 @@ use std::error::Error;
 use clap::Parser;
 
 use symcurve::cli::Cli;
+use symcurve::curve::calls::{CallParams, NUCLEOSOME_HALF_WIDTH};
 use symcurve::curve::scan::{CurveParams, DEFAULT_CHUNK_SCORES, Stage, SymParams};
 use symcurve::output::{self, OutputFormat};
 use symcurve::stream::{self, ScanConfig};
@@ -89,21 +90,57 @@ fn run() -> Result<(), Box<dyn Error>> {
         Ok(())
     };
 
-    match format {
-        OutputFormat::BedGraph => output::write_bedgraph_streaming(&args.output, produce)?,
-        OutputFormat::BigWig => {
-            // The header needs every chromosome size before any value, so names and
-            // lengths are read in a first pass that keeps no sequence.
-            let sizes = match &index {
-                // The index already carries every name and length.
-                Some(index) => stream::chrom_sizes_from_index(index),
-                None => stream::chrom_sizes(&args.input)
-                    .map_err(|e| format!("cannot read {}: {e}", args.input.display()))?,
-            };
-            // Keep roughly a chunk's worth of values queued: enough to keep the writer
-            // fed, bounded so a slow writer cannot let the queue grow without limit.
-            let queue_depth = chunk_scores.min(1 << 16);
-            output::write_bigwig_streaming(&args.output, sizes, queue_depth, produce)?
+    if args.stage.is_calls() {
+        // Calls are features, not per-base values, so they go to GFF rather than to a
+        // signal format.
+        if format != OutputFormat::Gff {
+            return Err(format!(
+                "--stage {:?} produces nucleosome calls, which are written as GFF; \
+                 give the output a .gff extension",
+                args.stage
+            )
+            .into());
+        }
+        let call_params = CallParams {
+            half_width: NUCLEOSOME_HALF_WIDTH,
+            spacer: usize::from(args.min_linker_size),
+        };
+        let greedy = args.stage == symcurve::cli::Stage::FinalCalls;
+        let feature = match args.roll {
+            symcurve::cli::Roll::Active => "stat_nucleosome",
+            symcurve::cli::Roll::Simple => "act_nucleosome",
+        };
+        let input = args.input.clone();
+        let verbose = args.verbose;
+        output::write_gff_streaming(&args.output, feature, move |emit| {
+            let stats = stream::for_each_record_calls(&input, &config, &call_params, greedy, emit)?;
+            if verbose {
+                eprintln!(
+                    "{} records, {} calls; largest record {} bases",
+                    stats.records, stats.scores, stats.longest_record
+                );
+            }
+            Ok(())
+        })?;
+    } else {
+        match format {
+            OutputFormat::Gff => {
+                return Err("GFF output is only produced by --stage calls or final-calls".into());
+            }
+            OutputFormat::BedGraph => output::write_bedgraph_streaming(&args.output, produce)?,
+            OutputFormat::BigWig => {
+                // The header needs every chromosome size before any value, so names and
+                // lengths are read in a first pass that keeps no sequence.
+                let sizes = match &index {
+                    Some(index) => stream::chrom_sizes_from_index(index),
+                    None => stream::chrom_sizes(&args.input)
+                        .map_err(|e| format!("cannot read {}: {e}", args.input.display()))?,
+                };
+                // Keep roughly a chunk's worth of values queued: enough to keep the writer
+                // fed, bounded so a slow writer cannot let the queue grow without limit.
+                let queue_depth = chunk_scores.min(1 << 16);
+                output::write_bigwig_streaming(&args.output, sizes, queue_depth, produce)?
+            }
         }
     }
 
@@ -114,6 +151,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             match format {
                 OutputFormat::BigWig => "bigWig",
                 OutputFormat::BedGraph => "bedGraph",
+                OutputFormat::Gff => "GFF",
             }
         );
     }
@@ -132,7 +170,7 @@ fn curve_params(args: &Cli) -> CurveParams {
         roll_type: args.roll.into(),
         step_b: usize::from(args.curve_step_one) - 1,
         step_c: usize::from(args.curve_step),
-        curve_scale: f64::from(args.curve_scale),
+        curve_scale: args.curve_scale,
     }
 }
 
@@ -157,9 +195,7 @@ fn warn_about_unused_arguments(args: &Cli) {
     {
         eprintln!("warning: --symcurve-win and --symcurve-step only apply to --stage symmetry");
     }
-    if args.min_linker_size != 30 {
-        eprintln!(
-            "warning: --min-linker-size applies to nucleosome calling, which is not implemented yet"
-        );
+    if args.min_linker_size != 30 && !args.stage.is_calls() {
+        eprintln!("warning: --min-linker-size only applies to --stage calls or final-calls");
     }
 }

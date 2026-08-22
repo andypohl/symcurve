@@ -162,6 +162,36 @@ Symmetry is also the only stage whose cost per base is not constant: each dyad s
 incrementally, since an absolute difference does not telescope. At the default window that
 is about 51 operations per dyad against roughly one for curvature.
 
+## Nucleosome calls carry three reference quirks
+
+Calling is straightforward: a dyad whose symmetry score is above zero, and whose 147-base
+footprint fits inside the record, becomes a call. Selecting non-overlapping calls is
+greedy: take the highest scoring first, and reject anything within 177 bases of one already
+taken. Three details of the reference implementation survive into this one.
+
+**A phantom call at position 0.** The reference initialises its accepted-position array
+holding a single zero, and its rejection scan includes that element, so a call that does
+not exist at position 0 rejects everything within 177 bases of it. No dyad at or below 177
+can ever be selected. This is reproduced, and is visible in the reference's own output:
+initial calls appear at dyads 118, 144, 158 and 170, but its first selected call is at 178.
+
+**Coordinates are zero-based.** The reference prints `dyad - 73` directly, which indexes
+its arrays from zero, where GFF specifies one-based inclusive coordinates. Every feature it
+emits is therefore one base to the left of where a genome browser will place it. This is
+reproduced so that output can be compared against the reference position for position, but
+it means the files are not spec-conformant GFF, and a consumer should add one.
+
+**Ties are not reproducible.** The reference orders equally scoring candidates by Perl hash
+iteration, which is randomised per process, so its selection among tied scores differs
+between runs of itself. Ties are broken here by ascending dyad, which is at least
+deterministic, but it means tied cases cannot be expected to match.
+
+The selection is also where the reference spends its time. It scans every accepted call for
+every candidate, which is quadratic: fitted to measurements between 200 kb and 1.6 Mb, that
+term alone extrapolates to about 17 hours for human chr21. Since candidates are rejected
+purely by distance, keeping the accepted dyads sorted and querying the exclusion window as
+a range makes the same rule `O(n log n)`. Full chr21 selection takes about one second here.
+
 ## `--curve-step-two` cannot be set independently
 
 The reference implementation takes two rolling-mean parameters, `stepone` and `steptwo`. Its

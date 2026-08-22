@@ -24,7 +24,7 @@
 //!       --symcurve-step <SYMCURVE_STEP>      symcurve step [default: 1]
 //!       --min-linker-size <MIN_LINKER_SIZE>  minimum linker size [default: 30]
 //!       --max-memory <MAX_MEMORY>            score buffer budget [default: 8G]
-//!       --stage <STAGE>                      curvature or symmetry [default: curvature]
+//!       --stage <STAGE>                      curvature, symmetry, calls, final-calls [default: curvature]
 //!       --roll <ROLL>                        simple or active [default: simple]
 //!   -h, --help                               Print help
 //!   -V, --version                            Print version
@@ -38,15 +38,27 @@ use std::path::PathBuf;
 pub enum Stage {
     /// Curvature values.
     Curvature,
-    /// Symmetry of curvature around each dyad, the final stage.
+    /// Symmetry of curvature around each dyad.
     Symmetry,
+    /// Every nucleosome call, which may overlap one another.
+    Calls,
+    /// Non-overlapping nucleosome calls, chosen greedily by score.
+    FinalCalls,
+}
+
+impl Stage {
+    /// Whether this stage produces nucleosome calls rather than per-base scores.
+    pub fn is_calls(self) -> bool {
+        matches!(self, Stage::Calls | Stage::FinalCalls)
+    }
 }
 
 impl From<Stage> for crate::curve::scan::Stage {
     fn from(stage: Stage) -> Self {
         match stage {
             Stage::Curvature => Self::Curvature,
-            Stage::Symmetry => Self::Symmetry,
+            // Calls are derived from symmetry, so the scoring stage is the same.
+            Stage::Symmetry | Stage::Calls | Stage::FinalCalls => Self::Symmetry,
         }
     }
 }
@@ -92,7 +104,7 @@ pub struct Cli {
 
     /// curve scale
     #[arg(long, default_value = "0.33335", value_parser = parse_float_in_range)]
-    pub curve_scale: f32,
+    pub curve_scale: f64,
 
     /// curve step one
     #[arg(long, default_value = "6", value_parser = clap::value_parser!(u16).range(1..))]
@@ -127,9 +139,9 @@ pub struct Cli {
     pub roll: Roll,
 }
 
-fn parse_float_in_range(s: &str) -> Result<f32, String> {
+fn parse_float_in_range(s: &str) -> Result<f64, String> {
     let value = s
-        .parse::<f32>()
+        .parse::<f64>()
         .map_err(|_| "Value must be a floating-point number")?;
     if (0.0..=1.0).contains(&value) {
         Ok(value)
@@ -207,6 +219,19 @@ mod tests {
             "--curve-scale",
             curve_scale_s,
         ])
+    }
+
+    #[test]
+    fn test_curve_scale_keeps_full_precision() {
+        // Parsed as f32 this became 0.33334999..., a relative error of 8e-9 that every
+        // curvature value carried and that symmetry squared into 1.7e-8. That was enough
+        // to move agreement with the reference implementation by three orders.
+        let args = Cli::parse_from(["symcurve", "in.fa", "out.bw"]);
+        assert_eq!(args.curve_scale, 0.33335_f64);
+
+        let args = Cli::parse_from(["symcurve", "in.fa", "out.bw", "--curve-scale", "0.1"]);
+        assert_eq!(args.curve_scale, 0.1_f64);
+        assert_ne!(args.curve_scale, f64::from(0.1_f32));
     }
 
     #[test]

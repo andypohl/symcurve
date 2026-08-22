@@ -14,6 +14,7 @@ use noodles_fasta::fai;
 
 use rayon::prelude::*;
 
+use crate::curve::calls::{CallParams, NucleosomeCall, call_nucleosomes, greedy_non_overlapping};
 use crate::curve::scan::{
     CurveParams, Stage, SymParams, chunks, score_bases, score_symmetry_bases, sym_chunks,
 };
@@ -246,6 +247,68 @@ where
 
             own_start = own_end + 1;
         }
+    }
+    Ok(stats)
+}
+
+/// Score every record and hand its nucleosome calls to `on_record`, with the sequence.
+///
+/// Calls need two things the per-score path does not provide: the record's bases, for the
+/// sequence the reference puts in the GFF attribute column, and every call for a record at
+/// once, because the greedy selection ranks them against each other. Both are per record,
+/// so this reads whole records rather than windows even when an index is available.
+///
+/// Only dyads that actually score are retained, which is a small fraction of positions, so
+/// what is held is the calls for one record rather than its scores.
+pub fn for_each_record_calls<F>(
+    input: &Path,
+    config: &ScanConfig,
+    call_params: &CallParams,
+    greedy: bool,
+    mut on_record: F,
+) -> io::Result<RunStats>
+where
+    F: FnMut(&str, &[u8], &[NucleosomeCall], usize) -> io::Result<()>,
+{
+    let mut reader = open(input)?;
+    let mut stats = RunStats::default();
+
+    for result in reader.records() {
+        let record = result?;
+        let name = String::from_utf8_lossy(record.name()).into_owned();
+        let length = record.sequence().len();
+        stats.records += 1;
+        stats.longest_record = stats.longest_record.max(length);
+
+        // Keep the sequence alive for the attribute column while the pieces borrow it.
+        let sequence: Vec<u8> = record.sequence().as_ref().to_vec();
+        let pieces = split_seq_by_gaps(record);
+        stats.pieces += pieces.len();
+
+        let mut scored: Vec<(usize, f64)> = Vec::new();
+        emit_pieces(
+            &name,
+            &pieces,
+            0,
+            config,
+            None,
+            &mut |_, position, score| {
+                if score > 0.0 {
+                    // The reference indexes its arrays from zero; positions here are 1-based.
+                    scored.push((position - 1, score));
+                }
+                Ok(())
+            },
+        )?;
+
+        let calls = call_nucleosomes(&scored, length, call_params);
+        let calls = if greedy {
+            greedy_non_overlapping(&calls, call_params)
+        } else {
+            calls
+        };
+        stats.scores += calls.len();
+        on_record(&name, &sequence, &calls, call_params.half_width)?;
     }
     Ok(stats)
 }

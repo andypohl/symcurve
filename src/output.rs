@@ -11,6 +11,8 @@ use std::thread;
 
 use bigtools::BigWigWrite;
 use bigtools::Value;
+
+use crate::curve::calls::NucleosomeCall;
 use bigtools::beddata::BedParserStreamingIterator;
 
 /// The output formats this tool can write.
@@ -20,6 +22,8 @@ pub enum OutputFormat {
     BigWig,
     /// Plain-text bedGraph: `chrom<TAB>start<TAB>end<TAB>value`, 0-based half-open.
     BedGraph,
+    /// Plain-text GFF of nucleosome calls, one feature per call.
+    Gff,
 }
 
 impl OutputFormat {
@@ -38,6 +42,7 @@ impl OutputFormat {
         match ext.as_str() {
             "bw" | "bigwig" => Ok(OutputFormat::BigWig),
             "bedgraph" | "bg" => Ok(OutputFormat::BedGraph),
+            "gff" | "gff2" | "gff3" => Ok(OutputFormat::Gff),
             _ => Err(UnknownFormat {
                 path: path.display().to_string(),
             }),
@@ -171,6 +176,44 @@ where
         return Err(err.into());
     }
     write_result?;
+    Ok(())
+}
+
+/// Write nucleosome calls as GFF, pulling records from `produce` as they are needed.
+///
+/// One feature per call. The attribute column carries the called sequence, as the
+/// reference implementation does.
+///
+/// Coordinates follow the reference rather than the GFF specification. It prints
+/// `dyad - half_width` directly, which is a zero-based index into the record, where GFF
+/// expects one-based inclusive coordinates. Everything it emits is therefore one base to
+/// the left of where a browser will read it. Reproduced so that positions can be compared
+/// against the reference; see the Algorithm Issues page.
+pub fn write_gff_streaming<P>(
+    path: &Path,
+    feature: &str,
+    produce: P,
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    P: FnOnce(
+        &mut dyn FnMut(&str, &[u8], &[NucleosomeCall], usize) -> io::Result<()>,
+    ) -> io::Result<()>,
+{
+    let mut out = BufWriter::new(File::create(path)?);
+    produce(&mut |name, bases, calls, half_width| {
+        for call in calls {
+            let start = call.dyad - half_width;
+            let end = call.dyad + half_width;
+            let sequence = std::str::from_utf8(&bases[start..=end]).unwrap_or("");
+            writeln!(
+                out,
+                "{name}\tevidence\t{feature}\t{start}\t{end}\t{}\t+\t.\t{sequence}",
+                call.reported_score()
+            )?;
+        }
+        Ok(())
+    })?;
+    out.flush()?;
     Ok(())
 }
 

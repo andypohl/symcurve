@@ -247,3 +247,95 @@ fn test_roll_matrix_is_selectable() {
     std::fs::remove_file(&simple).ok();
     std::fs::remove_file(&active).ok();
 }
+
+#[test]
+fn test_nucleosome_calls_end_to_end() {
+    let input = write_fasta("calls");
+    let initial = tmp_path("calls-initial.gff");
+    let final_ = tmp_path("calls-final.gff");
+
+    for (out, stage) in [(&initial, "calls"), (&final_, "final-calls")] {
+        let output = Command::new(EXE)
+            .args([
+                input.to_str().unwrap(),
+                out.to_str().unwrap(),
+                "--stage",
+                stage,
+                "--symcurve-win",
+                "20",
+            ])
+            .output()
+            .expect("failed to run");
+        assert!(output.status.success(), "{:?}", output);
+    }
+
+    let read = |p: &std::path::Path| -> Vec<Vec<String>> {
+        std::fs::read_to_string(p)
+            .unwrap()
+            .lines()
+            .map(|l| l.split('\t').map(str::to_string).collect())
+            .collect()
+    };
+    let init = read(&initial);
+    let fin = read(&final_);
+    assert!(!init.is_empty(), "no calls made");
+    assert!(fin.len() <= init.len(), "selection should not add calls");
+
+    for row in &init {
+        assert_eq!(row.len(), 9, "GFF has nine columns");
+        assert_eq!(row[1], "evidence");
+        let (start, end) = (
+            row[3].parse::<usize>().unwrap(),
+            row[4].parse::<usize>().unwrap(),
+        );
+        // A nucleosome footprint is 147 bases, dyad +/- 73.
+        assert_eq!(end - start, 146);
+        assert_eq!(
+            row[8].len(),
+            147,
+            "attribute column holds the called sequence"
+        );
+        assert_eq!(row[6], "+");
+        assert!(row[5].parse::<f64>().unwrap() > 0.0);
+    }
+
+    // Final calls must be a subset of the initial ones, and mutually far apart.
+    let init_starts: std::collections::HashSet<usize> =
+        init.iter().map(|r| r[3].parse().unwrap()).collect();
+    let fin_starts: Vec<usize> = fin.iter().map(|r| r[3].parse().unwrap()).collect();
+    for s in &fin_starts {
+        assert!(
+            init_starts.contains(s),
+            "final call {s} was not an initial call"
+        );
+    }
+    for pair in fin_starts.windows(2) {
+        assert!(pair[1] - pair[0] > 177, "final calls {pair:?} overlap");
+    }
+
+    std::fs::remove_file(&input).ok();
+    std::fs::remove_file(&initial).ok();
+    std::fs::remove_file(&final_).ok();
+}
+
+#[test]
+fn test_call_stages_require_gff_output() {
+    let input = write_fasta("callsfmt");
+    let out = tmp_path("callsfmt-out.bedGraph");
+    let output = Command::new(EXE)
+        .args([
+            input.to_str().unwrap(),
+            out.to_str().unwrap(),
+            "--stage",
+            "calls",
+        ])
+        .output()
+        .expect("failed to run");
+    assert!(!output.status.success());
+    let err = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        err.contains(".gff"),
+        "should say what extension is wanted: {err}"
+    );
+    std::fs::remove_file(&input).ok();
+}
