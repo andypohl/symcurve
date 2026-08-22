@@ -24,12 +24,50 @@
 //!       --symcurve-step <SYMCURVE_STEP>      symcurve step [default: 1]
 //!       --min-linker-size <MIN_LINKER_SIZE>  minimum linker size [default: 30]
 //!       --max-memory <MAX_MEMORY>            score buffer budget [default: 8G]
+//!       --stage <STAGE>                      curvature or symmetry [default: curvature]
+//!       --roll <ROLL>                        simple or active [default: simple]
 //!   -h, --help                               Print help
 //!   -V, --version                            Print version
 //! ```
 
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use std::path::PathBuf;
+
+/// Which stage of the calculation to write out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum Stage {
+    /// Curvature values.
+    Curvature,
+    /// Symmetry of curvature around each dyad, the final stage.
+    Symmetry,
+}
+
+impl From<Stage> for crate::curve::scan::Stage {
+    fn from(stage: Stage) -> Self {
+        match stage {
+            Stage::Curvature => Self::Curvature,
+            Stage::Symmetry => Self::Symmetry,
+        }
+    }
+}
+
+/// Which roll matrix to score with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum Roll {
+    /// The simple matrix, used for the DNase state in the reference implementation.
+    Simple,
+    /// The activated matrix, used for the nucleosome state.
+    Active,
+}
+
+impl From<Roll> for crate::curve::matrix::RollType {
+    fn from(roll: Roll) -> Self {
+        match roll {
+            Roll::Simple => Self::Simple,
+            Roll::Active => Self::Active,
+        }
+    }
+}
 
 #[derive(Parser, Debug)]
 #[command(version = env!("CARGO_PKG_VERSION"), about = "Symmetry of DNA curvature.", long_about = None)]
@@ -79,6 +117,14 @@ pub struct Cli {
     /// upper bound on memory used to buffer scores, e.g. 8G, 512M, 64K
     #[arg(long, default_value = "8G")]
     pub max_memory: crate::memory::MemoryBudget,
+
+    /// which stage to write out
+    #[arg(long, value_enum, default_value_t = Stage::Curvature)]
+    pub stage: Stage,
+
+    /// which roll matrix to score with
+    #[arg(long, value_enum, default_value_t = Roll::Simple)]
+    pub roll: Roll,
 }
 
 fn parse_float_in_range(s: &str) -> Result<f32, String> {

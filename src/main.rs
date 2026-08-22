@@ -5,10 +5,9 @@ use std::error::Error;
 use clap::Parser;
 
 use symcurve::cli::Cli;
-use symcurve::curve::matrix::RollType;
-use symcurve::curve::scan::{CurveParams, DEFAULT_CHUNK_SCORES};
+use symcurve::curve::scan::{CurveParams, DEFAULT_CHUNK_SCORES, Stage, SymParams};
 use symcurve::output::{self, OutputFormat};
-use symcurve::stream;
+use symcurve::stream::{self, ScanConfig};
 
 /// Upper bound on how much sequence to hold when reading through an index. Past this a
 /// larger window costs memory without saving meaningful work.
@@ -31,7 +30,12 @@ fn run() -> Result<(), Box<dyn Error>> {
     let format = OutputFormat::from_path(&args.output)?;
 
     let params = curve_params(&args);
-    warn_about_unused_arguments(&args, &params);
+    let sym = SymParams {
+        win: usize::from(args.symcurve_win),
+        step: usize::from(args.symcurve_step),
+    };
+    let stage = Stage::from(args.stage);
+    warn_about_unused_arguments(&args);
 
     let threads = rayon::current_num_threads();
     let chunk_scores = args.max_memory.chunk_scores(threads, DEFAULT_CHUNK_SCORES);
@@ -59,21 +63,22 @@ fn run() -> Result<(), Box<dyn Error>> {
         }
     }
 
+    let config = ScanConfig {
+        params,
+        sym,
+        stage,
+        chunk_scores,
+        batch: threads,
+        window_bases,
+    };
+
     let input = args.input.clone();
     let verbose = args.verbose;
     let index_for_run = index.clone();
     let produce = move |emit: &mut dyn FnMut(&str, usize, f64) -> std::io::Result<()>| {
         let stats = match &index_for_run {
-            Some(index) => stream::for_each_score_indexed(
-                &input,
-                index,
-                &params,
-                chunk_scores,
-                threads,
-                window_bases,
-                emit,
-            )?,
-            None => stream::for_each_score(&input, &params, chunk_scores, threads, emit)?,
+            Some(index) => stream::for_each_score_indexed(&input, index, &config, emit)?,
+            None => stream::for_each_score(&input, &config, emit)?,
         };
         if verbose {
             eprintln!(
@@ -124,7 +129,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 /// consistency rather than used.
 fn curve_params(args: &Cli) -> CurveParams {
     CurveParams {
-        roll_type: RollType::Simple,
+        roll_type: args.roll.into(),
         step_b: usize::from(args.curve_step_one) - 1,
         step_c: usize::from(args.curve_step),
         curve_scale: f64::from(args.curve_scale),
@@ -133,10 +138,10 @@ fn curve_params(args: &Cli) -> CurveParams {
 
 /// Tell the user about arguments that will not affect the result.
 ///
-/// Several flags describe stages that are not implemented yet. Accepting them silently
-/// would let someone believe they had changed the output when they had not.
-fn warn_about_unused_arguments(args: &Cli, params: &CurveParams) {
-    let implied_step_two = params.step_b.saturating_sub(1);
+/// Accepting a flag silently would let someone believe they had changed the output when
+/// they had not.
+fn warn_about_unused_arguments(args: &Cli) {
+    let implied_step_two = usize::from(args.curve_step_one).saturating_sub(2);
     if usize::from(args.curve_step_two) != implied_step_two {
         eprintln!(
             "warning: --curve-step-two {} is inconsistent with --curve-step-one {} \
@@ -147,13 +152,14 @@ fn warn_about_unused_arguments(args: &Cli, params: &CurveParams) {
     if args.matrices.is_some() {
         eprintln!("warning: --matrices is not implemented yet and is being ignored");
     }
-    for (name, is_default) in [
-        ("--symcurve-win", args.symcurve_win == 101),
-        ("--symcurve-step", args.symcurve_step == 1),
-        ("--min-linker-size", args.min_linker_size == 30),
-    ] {
-        if !is_default {
-            eprintln!("warning: {name} applies to the SymCurv stage, which is not implemented yet");
-        }
+    if args.stage == symcurve::cli::Stage::Curvature
+        && (args.symcurve_win != 101 || args.symcurve_step != 1)
+    {
+        eprintln!("warning: --symcurve-win and --symcurve-step only apply to --stage symmetry");
+    }
+    if args.min_linker_size != 30 {
+        eprintln!(
+            "warning: --min-linker-size applies to nucleosome calling, which is not implemented yet"
+        );
     }
 }

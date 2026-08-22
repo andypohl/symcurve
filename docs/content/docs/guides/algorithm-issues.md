@@ -145,6 +145,23 @@ time without any test being able to detect it. It now matches the reference impl
 and the equations above, and is pinned by a test that calls the step function directly with
 a non-zero tilt, since nothing driving the iterator can exercise it.
 
+## The symmetry stage costs a wider margin
+
+Symmetry is computed from curvature, and a dyad needs `--symcurve-win` curvature values on
+each side of it. Each of those curvature values already cost \(a+b+1\) bases of its own, so
+the margins add: `--stage symmetry` yields no score for the first and last
+\(a+b+1+\mathtt{win}\) bases of every piece. At the defaults that is 122 bases at each end
+rather than 21, and a piece shorter than 244 bases yields nothing at all.
+
+The reference implementation is more conservative still. Its mirrored sum reaches only
+`win/2` on each side, but it skips a full `win` at each end regardless, so roughly half the
+margin it reserves goes unused. That is reproduced here so output positions match.
+
+Symmetry is also the only stage whose cost per base is not constant: each dyad sums
+`win/2` mirrored pairs, and unlike the rolling means that sum cannot be maintained
+incrementally, since an absolute difference does not telescope. At the default window that
+is about 51 operations per dyad against roughly one for curvature.
+
 ## `--curve-step-two` cannot be set independently
 
 The reference implementation takes two rolling-mean parameters, `stepone` and `steptwo`. Its

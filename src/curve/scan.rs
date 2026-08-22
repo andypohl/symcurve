@@ -7,7 +7,7 @@
 
 use rayon::prelude::*;
 
-use crate::curve::iters::CurveIter;
+use crate::curve::iters::{CurveIter, SymCurveIterator};
 use crate::curve::matrix::RollType;
 use crate::fasta::RecordPiece;
 
@@ -48,6 +48,41 @@ impl CurveParams {
     /// from `curvstep + stepone`.
     pub fn lead_in(&self) -> usize {
         self.step_b + self.step_c + 1
+    }
+}
+
+/// Which stage of the calculation to produce.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Stage {
+    /// Curvature: the output of [`CurveIter`].
+    Curvature,
+    /// Symmetry of curvature around each dyad: the final stage.
+    Symmetry,
+}
+
+/// The parameters of the symmetry stage.
+#[derive(Debug, Clone, Copy)]
+pub struct SymParams {
+    /// Margin of curvature values kept on each side of a dyad. The reference uses 101.
+    pub win: usize,
+    /// Stride between dyads and between the mirrored pairs summed at each.
+    pub step: usize,
+}
+
+impl SymParams {
+    /// How many bases at each end of a piece receive no symmetry score.
+    ///
+    /// The symmetry stage consumes `win` curvature values on each side of a dyad, and each
+    /// curvature value already cost `CurveParams::lead_in` bases, so the two margins add.
+    pub fn lead_in(&self, params: &CurveParams) -> usize {
+        params.lead_in() + self.win
+    }
+
+    /// How many symmetry scores a piece of `piece_len` bases yields.
+    pub fn score_count(&self, piece_len: usize, params: &CurveParams) -> usize {
+        let curve_len = piece_len.saturating_sub(2 * params.lead_in());
+        let dyads = curve_len.saturating_sub(2 * self.win);
+        dyads.div_ceil(self.step.max(1))
     }
 }
 
@@ -94,6 +129,48 @@ pub fn chunks(piece_len: usize, params: &CurveParams, chunk_scores: usize) -> Ve
             }
         })
         .collect()
+}
+
+/// Divide a piece into chunks of symmetry scores.
+///
+/// Same reasoning as [`chunks`], with a wider margin: a dyad needs `win` curvature values
+/// on each side, and each of those needed `lead_in` bases of its own. Scoring the bases
+/// `[p*step, (q-1)*step + 2*win + 2*lead_in + 1)` yields exactly the symmetry scores
+/// `[p, q)`, so the chunks tile the output without gap or overlap.
+pub fn sym_chunks(
+    piece_len: usize,
+    params: &CurveParams,
+    sym: &SymParams,
+    chunk_scores: usize,
+) -> Vec<Chunk> {
+    let step = sym.step.max(1);
+    let lead = params.lead_in();
+    let out_len = sym.score_count(piece_len, params);
+    let chunk_scores = chunk_scores.max(1);
+    (0..out_len)
+        .step_by(chunk_scores)
+        .map(|out_start| {
+            let out_end = (out_start + chunk_scores).min(out_len);
+            Chunk {
+                in_start: out_start * step,
+                in_end: (out_end - 1) * step + 2 * sym.win + 2 * lead + 1,
+                out_start,
+            }
+        })
+        .collect()
+}
+
+/// Score a run of bases through to symmetry, with fresh state.
+pub fn score_symmetry_bases(bases: &[u8], params: &CurveParams, sym: &SymParams) -> Vec<f64> {
+    CurveIter::new(
+        bases.iter().copied(),
+        params.roll_type,
+        params.step_b,
+        params.step_c,
+        params.curve_scale,
+    )
+    .sym_curve_iter(sym.win, sym.step)
+    .collect()
 }
 
 /// Score a run of bases with fresh state.
@@ -328,6 +405,84 @@ mod tests {
                 assert_relative_eq!(a, b, epsilon = 1e-9, max_relative = 1e-9);
                 let _ = i;
             }
+        }
+    }
+
+    fn sym() -> SymParams {
+        SymParams { win: 20, step: 1 }
+    }
+
+    #[test]
+    fn test_sym_chunks_tile_the_output_exactly() {
+        let p = params();
+        for step in [1usize, 3, 5] {
+            let sp = SymParams { win: 20, step };
+            let piece_len = 2000usize;
+            let out_len = sp.score_count(piece_len, &p);
+            assert!(out_len > 0);
+            for chunk_scores in [1usize, 7, 64, 500, out_len, out_len * 2] {
+                let plan = sym_chunks(piece_len, &p, &sp, chunk_scores);
+                assert_eq!(plan.len(), out_len.div_ceil(chunk_scores.max(1)));
+                let mut expected = 0usize;
+                for c in &plan {
+                    assert_eq!(c.out_start, expected);
+                    assert!(c.in_end <= piece_len, "chunk reads past the piece");
+                    // A slice of this length yields exactly the scores the chunk claims.
+                    let produced = sp.score_count(c.in_end - c.in_start, &p);
+                    expected += produced;
+                }
+                assert_eq!(expected, out_len, "step {step} chunk {chunk_scores}");
+            }
+        }
+    }
+
+    #[test]
+    fn test_chunked_symmetry_matches_unchunked() {
+        // Chunking must not change the answer, exactly as for curvature.
+        let unit = b"CCAACATTTTGACTTTTTGGGAGGGCACTAGCACCTATCTACCCTGAATC";
+        let mut seq = Vec::new();
+        for _ in 0..60 {
+            seq.extend_from_slice(unit);
+        }
+        let pieces = split_seq_by_gaps(record_of(&seq));
+        let piece = &pieces[0];
+        let p = params();
+
+        for step in [1usize, 3] {
+            let sp = SymParams { win: 20, step };
+            let reference = score_symmetry_bases(piece.bases(), &p, &sp);
+            assert!(reference.len() > 500, "input too small to be meaningful");
+
+            for chunk_scores in [1usize, 7, 64, 500, reference.len(), reference.len() * 2] {
+                let plan = sym_chunks(piece.bases().len(), &p, &sp, chunk_scores);
+                let rebuilt: Vec<f64> = plan
+                    .iter()
+                    .flat_map(|c| {
+                        score_symmetry_bases(&piece.bases()[c.in_start..c.in_end], &p, &sp)
+                    })
+                    .collect();
+                assert_eq!(
+                    rebuilt.len(),
+                    reference.len(),
+                    "length differs at step {step} chunk {chunk_scores}"
+                );
+                for (a, b) in reference.iter().zip(&rebuilt) {
+                    // A chunk accumulates twist over a shorter run, so rounding differs.
+                    assert_relative_eq!(a, b, epsilon = 1e-9, max_relative = 1e-6);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_symmetry_lead_in_and_count() {
+        let p = params();
+        let sp = sym();
+        // Symmetry costs the curvature lead-in plus the symmetry window on each side.
+        assert_eq!(sp.lead_in(&p), p.lead_in() + sp.win);
+        for len in [0usize, 1, 2 * sp.lead_in(&p), 2 * sp.lead_in(&p) + 1, 5000] {
+            let expected = len.saturating_sub(2 * sp.lead_in(&p));
+            assert_eq!(sp.score_count(len, &p), expected, "len {len}");
         }
     }
 

@@ -165,3 +165,85 @@ fn test_bad_max_memory_is_rejected() {
         "error should show the expected form: {err}"
     );
 }
+
+#[test]
+fn test_symmetry_stage_end_to_end() {
+    let input = write_fasta("sym");
+    let curv = tmp_path("sym-curv.bedGraph");
+    let symm = tmp_path("sym-symm.bedGraph");
+
+    for (out, extra) in [
+        (&curv, vec![]),
+        (&symm, vec!["--stage", "symmetry", "--symcurve-win", "20"]),
+    ] {
+        let mut args = vec![input.to_str().unwrap(), out.to_str().unwrap()];
+        args.extend(extra);
+        let output = Command::new(EXE)
+            .args(&args)
+            .output()
+            .expect("failed to run");
+        assert!(output.status.success(), "{:?}", output);
+    }
+
+    let curv_lines: Vec<String> = std::fs::read_to_string(&curv)
+        .unwrap()
+        .lines()
+        .map(str::to_string)
+        .collect();
+    let symm_lines: Vec<String> = std::fs::read_to_string(&symm)
+        .unwrap()
+        .lines()
+        .map(str::to_string)
+        .collect();
+
+    // Symmetry costs 20 more on each side of every piece than curvature does. Three
+    // pieces of 150, 100 and 100 bases: the 100s lose everything beyond the margin.
+    assert!(!symm_lines.is_empty(), "symmetry produced nothing");
+    assert!(
+        symm_lines.len() < curv_lines.len(),
+        "symmetry should yield fewer scores than curvature"
+    );
+
+    // The first symmetry score sits 20 further in than the first curvature score.
+    let first_pos =
+        |lines: &[String]| -> u64 { lines[0].split('\t').nth(1).unwrap().parse().unwrap() };
+    assert_eq!(first_pos(&symm_lines), first_pos(&curv_lines) + 20);
+
+    // Scores are non-negative, and at least one dyad scored: symmetry is zero except at
+    // strict local minima, so an all-zero file would mean the minimum test never fired.
+    let values: Vec<f64> = symm_lines
+        .iter()
+        .map(|l| l.split('\t').nth(3).unwrap().parse().unwrap())
+        .collect();
+    assert!(values.iter().all(|v| *v >= 0.0), "negative symmetry score");
+    assert!(values.iter().any(|v| *v > 0.0), "no dyad scored at all");
+
+    std::fs::remove_file(&input).ok();
+    std::fs::remove_file(&curv).ok();
+    std::fs::remove_file(&symm).ok();
+}
+
+#[test]
+fn test_roll_matrix_is_selectable() {
+    let input = write_fasta("roll");
+    let simple = tmp_path("roll-simple.bedGraph");
+    let active = tmp_path("roll-active.bedGraph");
+    for (out, roll) in [(&simple, "simple"), (&active, "active")] {
+        let status = Command::new(EXE)
+            .args([
+                input.to_str().unwrap(),
+                out.to_str().unwrap(),
+                "--roll",
+                roll,
+            ])
+            .status()
+            .expect("failed to run");
+        assert!(status.success());
+    }
+    let a = std::fs::read_to_string(&simple).unwrap();
+    let b = std::fs::read_to_string(&active).unwrap();
+    assert_ne!(a, b, "the two roll matrices produced identical output");
+    std::fs::remove_file(&input).ok();
+    std::fs::remove_file(&simple).ok();
+    std::fs::remove_file(&active).ok();
+}

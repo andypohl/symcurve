@@ -552,6 +552,144 @@ trait EucDistIterator: Iterator<Item = RollMeanData> + Sized {
 
 impl<I: Iterator<Item = RollMeanData>> EucDistIterator for I {}
 
+/// The value assigned when a dyad's symmetry component comes out exactly zero.
+///
+/// A zero sum means every mirrored pair around the dyad was exactly equal, so the
+/// reciprocal is undefined. The reference implementation substitutes 100 and carries on,
+/// and callers downstream treat that as a saturated score rather than a real one.
+pub const DEGENERATE_SYMMETRY: f64 = 100.0;
+
+/// An iterator that computes symmetry of curvature around each candidate dyad.
+///
+/// This is the last stage: it consumes curvature values and yields one symmetry score per
+/// dyad. A score is non-zero only where the curvature has a strict local minimum, which is
+/// what a nucleosome dyad is expected to look like, and rises the more symmetric the
+/// curvature is on either side of it.
+///
+/// # Fields
+///
+/// * `inner`: The inner iterator that yields curvature values.
+/// * `buffer`: A buffer holding 2 * `win` + 1 curvature values, the dyad at its centre.
+/// * `win`: The margin kept on each side of the dyad.
+/// * `step`: The stride, both between dyads and between the mirrored pairs summed at each.
+/// * `inner_done`: Set once the inner iterator has returned None, so it is not polled again.
+pub struct SymCurveIter<I> {
+    inner: I,
+    buffer: VecDeque<f64>,
+    win: usize,
+    step: usize,
+    inner_done: bool,
+}
+
+impl<I> Iterator for SymCurveIter<I>
+where
+    I: Iterator<Item = f64>,
+{
+    type Item = f64;
+
+    /// Computes the symmetry score for the next dyad.
+    ///
+    /// Following the reference implementation, for a dyad \(d\):
+    ///
+    /// ```text
+    /// sum    = SUM over m of |curv[d + m] - curv[d - m]|,  m = 0, step, 2*step, ... <= win/2
+    /// slope  = (curv[d-1] - curv[d]) + (curv[d+1] - curv[d])
+    /// weight = 1/slope   if curv[d] is a strict local minimum and slope >= 0.01
+    ///          0         otherwise
+    /// score  = weight / sum
+    /// ```
+    ///
+    /// The mirrored sum runs out to `win / 2`, but a dyad is only considered once `win`
+    /// values are available on each side. That wider margin is the reference's, and it
+    /// means the first and last `win` curvature values yield no score even though only
+    /// `win / 2` are read. Reproduced here so the output positions match.
+    fn next(&mut self) -> Option<Self::Item> {
+        let span = 2 * self.win + 1;
+        while !self.inner_done && self.buffer.len() < span {
+            match self.inner.next() {
+                Some(value) => self.buffer.push_back(value),
+                None => self.inner_done = true,
+            }
+        }
+        if self.buffer.len() < span {
+            return None;
+        }
+
+        let dyad = self.win;
+        let half = self.win / 2;
+        let mut sum = 0.0;
+        let mut offset = 0;
+        while offset <= half {
+            sum += (self.buffer[dyad + offset] - self.buffer[dyad - offset]).abs();
+            offset += self.step;
+        }
+
+        let current = self.buffer[dyad];
+        let before = self.buffer[dyad - 1];
+        let after = self.buffer[dyad + 1];
+        let slope = (before - current) + (after - current);
+        let weight = if current < before && current < after && slope >= 0.01 {
+            1.0 / slope
+        } else {
+            0.0
+        };
+
+        // Compared against zero exactly, as the reference does: the substitution is for a
+        // sum that is precisely zero, not one that is merely small.
+        let score = if sum != 0.0 {
+            weight / sum
+        } else {
+            DEGENERATE_SYMMETRY
+        };
+
+        for _ in 0..self.step {
+            if self.buffer.pop_front().is_none() {
+                break;
+            }
+        }
+        Some(score)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let (lower, upper) =
+            window_size_hint(self.inner.size_hint(), self.buffer.len(), span_of(self.win));
+        let strided = |n: usize| n.div_ceil(self.step);
+        (strided(lower), upper.map(strided))
+    }
+}
+
+impl<I> FusedIterator for SymCurveIter<I> where I: Iterator<Item = f64> {}
+
+/// The number of curvature values a dyad needs in view: `win` on each side, plus itself.
+fn span_of(win: usize) -> usize {
+    2 * win + 1
+}
+
+/// A trait for curvature iterators to yield symmetry scores.
+///
+/// This is **layer 5** of the iterator stack, sitting on the curvature values that
+/// [`CurveIter`] produces.
+pub trait SymCurveIterator: Iterator<Item = f64> + Sized {
+    /// Wraps the iterator in a [`SymCurveIter`].
+    ///
+    /// # Parameters
+    ///
+    /// * `win`: The margin kept on each side of a dyad. The reference uses 101.
+    /// * `step`: The stride between dyads and between mirrored pairs. Values below 1 are
+    ///   treated as 1, since a stride of zero would never advance.
+    fn sym_curve_iter(self, win: usize, step: usize) -> SymCurveIter<Self> {
+        SymCurveIter {
+            inner: self,
+            buffer: VecDeque::new(),
+            win,
+            step: step.max(1),
+            inner_done: false,
+        }
+    }
+}
+
+impl<I: Iterator<Item = f64>> SymCurveIterator for I {}
+
 /// An iterator that computes the curvature of a DNA sequence.
 ///
 /// `CurveIter` wraps an iterator that yields `u8` and computes the curvature of the DNA sequence
@@ -1047,6 +1185,198 @@ mod tests {
         assert_relative_eq!(curves[5], 3.7726, epsilon = 1e-4);
         assert_relative_eq!(curves[6], 3.3483, epsilon = 1e-4);
         assert_relative_eq!(curves[7], 3.1042, epsilon = 1e-4);
+    }
+
+    /// A direct transcription of the reference implementation's SYMCURV subroutine,
+    /// kept deliberately unidiomatic so it reads against the Perl line by line and can
+    /// serve as an oracle for the iterator.
+    ///
+    /// ```perl
+    /// for (my $dyad = $win ; $dyad < scalar(@Curv) - $win ; $dyad += $step) {
+    ///     my $weight = 0; my $sum = 0;
+    ///     for (my $j = $dyad, my $k = $dyad ;
+    ///          $j < $dyad + int($win/2) + 1, $k > $dyad - int($win/2) - 1 ;
+    ///          $j += $step, $k -= $step) {
+    ///         $sum += abs($Curv[$j] - $Curv[$k]);
+    ///     }
+    ///     if (($Curv[$dyad] < $Curv[$dyad-1]) and ($Curv[$dyad] < $Curv[$dyad+1])
+    ///         and ((($Curv[$dyad-1]-$Curv[$dyad]) + ($Curv[$dyad+1]-$Curv[$dyad])) >= 0.01)) {
+    ///         $weight = 1/(($Curv[$dyad-1]-$Curv[$dyad]) + ($Curv[$dyad+1]-$Curv[$dyad]))
+    ///     } else { $weight = 0; }
+    ///     if ($sum != 0) { $symcurv[$dyad] = (1/$sum) * $weight; }
+    ///     else           { $symcurv[$dyad] = 100; }
+    /// }
+    /// ```
+    ///
+    /// Note the inner loop's comma operator: Perl evaluates only the last condition, so
+    /// the `$j` bound is dead and `$k` alone terminates the loop. Transcribed as written.
+    fn perl_symcurv(curv: &[f64], win: usize, step: usize) -> Vec<(usize, f64)> {
+        let mut out = Vec::new();
+        if curv.len() < 2 * win + 1 {
+            return out;
+        }
+        let half = win / 2;
+        let mut dyad = win;
+        while dyad < curv.len() - win {
+            let mut sum = 0.0;
+            let (mut j, mut k) = (dyad, dyad);
+            // `$k > $dyad - int($win/2) - 1`
+            while k + half + 1 > dyad {
+                sum += (curv[j] - curv[k]).abs();
+                j += step;
+                if k < step {
+                    break;
+                }
+                k -= step;
+            }
+            let weight = if curv[dyad] < curv[dyad - 1]
+                && curv[dyad] < curv[dyad + 1]
+                && ((curv[dyad - 1] - curv[dyad]) + (curv[dyad + 1] - curv[dyad])) >= 0.01
+            {
+                1.0 / ((curv[dyad - 1] - curv[dyad]) + (curv[dyad + 1] - curv[dyad]))
+            } else {
+                0.0
+            };
+            let value = if sum != 0.0 {
+                (1.0 / sum) * weight
+            } else {
+                100.0
+            };
+            out.push((dyad, value));
+            dyad += step;
+        }
+        out
+    }
+
+    fn synthetic_curvature(n: usize, seed: u64) -> Vec<f64> {
+        // Smooth-ish with genuine local minima, so the minimum test is actually exercised.
+        let mut x = seed;
+        (0..n)
+            .map(|i| {
+                x ^= x << 13;
+                x ^= x >> 7;
+                x ^= x << 17;
+                let noise = (x >> 11) as f64 / (1u64 << 53) as f64;
+                2.0 + (i as f64 / 7.0).sin() + 0.5 * (i as f64 / 3.0).cos() + 0.05 * noise
+            })
+            .collect()
+    }
+
+    #[test]
+    fn test_sym_curve_matches_the_reference_transcription() {
+        for (n, win, step) in [
+            (600usize, 101usize, 1usize),
+            (600, 101, 3),
+            (400, 51, 1),
+            (300, 20, 1),
+            (300, 20, 7),
+            (250, 101, 1), // too short: no dyads at all
+        ] {
+            let curv = synthetic_curvature(n, 0x2545F4914F6CDD1D ^ n as u64);
+            let expected = perl_symcurv(&curv, win, step);
+            let got: Vec<f64> = curv.iter().copied().sym_curve_iter(win, step).collect();
+            assert_eq!(
+                got.len(),
+                expected.len(),
+                "count differs for n={n} win={win} step={step}"
+            );
+            for (i, (&value, &(dyad, want))) in got.iter().zip(&expected).enumerate() {
+                assert_relative_eq!(value, want, epsilon = 1e-12, max_relative = 1e-12);
+                // The first score belongs to curvature index `win`, then every `step`.
+                assert_eq!(dyad, win + i * step);
+            }
+        }
+    }
+
+    #[test]
+    fn test_sym_curve_is_zero_away_from_local_minima() {
+        // A strictly increasing curve has no local minimum, so every dyad scores zero.
+        let curv: Vec<f64> = (0..500).map(|i| i as f64 * 0.01).collect();
+        let got: Vec<f64> = curv.iter().copied().sym_curve_iter(101, 1).collect();
+        assert!(!got.is_empty());
+        assert!(
+            got.iter().all(|&v| v == 0.0),
+            "expected all zero, got {got:?}"
+        );
+    }
+
+    #[test]
+    fn test_sym_curve_saturates_when_perfectly_symmetric() {
+        // Constant curvature makes every mirrored pair equal, so the sum is exactly zero
+        // and the reference substitutes 100.
+        let curv = vec![1.25f64; 500];
+        let got: Vec<f64> = curv.iter().copied().sym_curve_iter(101, 1).collect();
+        assert!(!got.is_empty());
+        assert!(
+            got.iter().all(|&v| v == DEGENERATE_SYMMETRY),
+            "expected the saturated value"
+        );
+    }
+
+    #[test]
+    fn test_sym_curve_scores_a_symmetric_minimum() {
+        // A V shape centred in the window: a genuine local minimum with perfectly
+        // symmetric sides, so weight is positive and the score is finite and positive.
+        let win = 20usize;
+        let n = 2 * win + 1;
+        let centre = win as f64;
+        let curv: Vec<f64> = (0..n)
+            .map(|i| 1.0 + (i as f64 - centre).abs() * 0.1)
+            .collect();
+        let got: Vec<f64> = curv.iter().copied().sym_curve_iter(win, 1).collect();
+        assert_eq!(got.len(), 1);
+        // Mirrored pairs are equal by construction, so the sum is zero and it saturates.
+        assert_eq!(got[0], DEGENERATE_SYMMETRY);
+
+        // Break the symmetry slightly: now the sum is non-zero and the score is finite.
+        let mut skewed = curv.clone();
+        skewed[win + 3] += 0.4;
+        let got: Vec<f64> = skewed.iter().copied().sym_curve_iter(win, 1).collect();
+        assert_eq!(got.len(), 1);
+        assert!(got[0] > 0.0 && got[0].is_finite(), "got {}", got[0]);
+        assert!(got[0] < DEGENERATE_SYMMETRY);
+    }
+
+    #[test]
+    fn test_sym_curve_needs_win_on_both_sides() {
+        for len in [0usize, 1, 100, 202, 203, 204] {
+            let curv = synthetic_curvature(len, 7);
+            let got: Vec<f64> = curv.iter().copied().sym_curve_iter(101, 1).collect();
+            let expected = len.saturating_sub(2 * 101);
+            assert_eq!(got.len(), expected, "len {len}");
+        }
+    }
+
+    #[test]
+    fn test_sym_curve_stacks_onto_the_curve_iterator() {
+        // The whole pipeline, bases through to symmetry.
+        let unit = b"CCAACATTTTGACTTTTTGGGAGGGCACTAGCACCTATCTACCCTGAATC";
+        let mut seq = Vec::new();
+        for _ in 0..20 {
+            seq.extend_from_slice(unit);
+        }
+        let (step_b, step_c, win) = (5usize, 15usize, 101usize);
+        let curves: Vec<f64> = CurveIter::new(
+            seq.iter().copied(),
+            matrix::RollType::Simple,
+            step_b,
+            step_c,
+            0.33335,
+        )
+        .collect();
+        let direct: Vec<f64> = curves.iter().copied().sym_curve_iter(win, 1).collect();
+        let stacked: Vec<f64> = CurveIter::new(
+            seq.iter().copied(),
+            matrix::RollType::Simple,
+            step_b,
+            step_c,
+            0.33335,
+        )
+        .sym_curve_iter(win, 1)
+        .collect();
+        assert_eq!(direct.len(), curves.len() - 2 * win);
+        assert_eq!(direct, stacked);
+        assert!(direct.iter().any(|&v| v > 0.0), "no dyad scored at all");
     }
 
     #[test]

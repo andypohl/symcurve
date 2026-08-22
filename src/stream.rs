@@ -14,8 +14,45 @@ use noodles_fasta::fai;
 
 use rayon::prelude::*;
 
-use crate::curve::scan::{CurveParams, chunks, score_bases};
+use crate::curve::scan::{
+    CurveParams, Stage, SymParams, chunks, score_bases, score_symmetry_bases, sym_chunks,
+};
 use crate::fasta::{RecordPiece, split_seq_by_gaps};
+
+/// Everything a scoring run needs beyond the input file itself.
+///
+/// Grouped rather than passed one at a time: these travel together through every entry
+/// point here, and a function taking eight positional values is easy to call wrongly.
+#[derive(Debug, Clone, Copy)]
+pub struct ScanConfig {
+    pub params: CurveParams,
+    pub sym: SymParams,
+    pub stage: Stage,
+    /// Scores produced per chunk, which is how the memory budget is applied.
+    pub chunk_scores: usize,
+    /// Chunks scored at once, normally the worker count.
+    pub batch: usize,
+    /// Bases held at once when reading through an index.
+    pub window_bases: usize,
+}
+
+impl ScanConfig {
+    /// How many bases at each end of a piece receive no score, for the selected stage.
+    pub fn lead_in(&self) -> usize {
+        match self.stage {
+            Stage::Curvature => self.params.lead_in(),
+            Stage::Symmetry => self.sym.lead_in(&self.params),
+        }
+    }
+
+    /// The gap between consecutive output positions.
+    pub fn stride(&self) -> usize {
+        match self.stage {
+            Stage::Curvature => 1,
+            Stage::Symmetry => self.sym.step.max(1),
+        }
+    }
+}
 
 /// A chromosome name and its length, as needed for a bigWig header.
 pub type ChromSize = (String, u32);
@@ -66,9 +103,7 @@ fn emit_pieces<F>(
     name: &str,
     pieces: &[RecordPiece],
     base_offset: usize,
-    params: &CurveParams,
-    chunk_scores: usize,
-    batch: usize,
+    config: &ScanConfig,
     owned: Option<(usize, usize)>,
     emit: &mut F,
 ) -> io::Result<usize>
@@ -79,21 +114,36 @@ where
     for piece in pieces {
         let bases = piece.bases();
         let piece_start = usize::from(piece.start);
-        let plan = chunks(bases.len(), params, chunk_scores);
+        let (lead, stride) = (config.lead_in(), config.stride());
+        let plan = match config.stage {
+            Stage::Curvature => chunks(bases.len(), &config.params, config.chunk_scores),
+            Stage::Symmetry => sym_chunks(
+                bases.len(),
+                &config.params,
+                &config.sym,
+                config.chunk_scores,
+            ),
+        };
 
         // Score a batch of chunks at a time: enough to keep every thread busy, few
         // enough that only that many chunks of scores exist at once.
-        for group in plan.chunks(batch.max(1)) {
+        for group in plan.chunks(config.batch.max(1)) {
             let scored: Vec<Vec<f64>> = group
                 .par_iter()
-                .map(|chunk| score_bases(&bases[chunk.in_start..chunk.in_end], params))
+                .map(|chunk| {
+                    let slice = &bases[chunk.in_start..chunk.in_end];
+                    match config.stage {
+                        Stage::Curvature => score_bases(slice, &config.params),
+                        Stage::Symmetry => score_symmetry_bases(slice, &config.params, &config.sym),
+                    }
+                })
                 .collect();
             for (chunk, values) in group.iter().zip(&scored) {
                 // out_start is an offset into the piece's scores; the first score sits
-                // lead_in bases into the piece.
-                let first = base_offset + piece_start + params.lead_in() + chunk.out_start;
+                // lead bases into the piece, and successive scores are `stride` apart.
+                let first = base_offset + piece_start + lead + chunk.out_start * stride;
                 for (i, &value) in values.iter().enumerate() {
-                    let position = first + i;
+                    let position = first + i * stride;
                     if let Some((lo, hi)) = owned
                         && (position < lo || position > hi)
                     {
@@ -113,13 +163,7 @@ where
 /// `emit` receives the record name, the 1-based position the score belongs to, and the
 /// score. It is called in position order within a record and in file order across
 /// records, which is the order a bigWig writer requires.
-pub fn for_each_score<F>(
-    input: &Path,
-    params: &CurveParams,
-    chunk_scores: usize,
-    batch: usize,
-    mut emit: F,
-) -> io::Result<RunStats>
+pub fn for_each_score<F>(input: &Path, config: &ScanConfig, mut emit: F) -> io::Result<RunStats>
 where
     F: FnMut(&str, usize, f64) -> io::Result<()>,
 {
@@ -135,16 +179,7 @@ where
 
         let pieces = split_seq_by_gaps(record);
         stats.pieces += pieces.len();
-        stats.scores += emit_pieces(
-            &name,
-            &pieces,
-            0,
-            params,
-            chunk_scores,
-            batch,
-            None,
-            &mut emit,
-        )?;
+        stats.scores += emit_pieces(&name, &pieces, 0, config, None, &mut emit)?;
     }
     Ok(stats)
 }
@@ -162,10 +197,7 @@ where
 pub fn for_each_score_indexed<F>(
     input: &Path,
     index: &fai::Index,
-    params: &CurveParams,
-    chunk_scores: usize,
-    batch: usize,
-    window_bases: usize,
+    config: &ScanConfig,
     mut emit: F,
 ) -> io::Result<RunStats>
 where
@@ -173,8 +205,8 @@ where
 {
     let inner = BufReader::new(File::open(input)?);
     let mut reader = noodles_fasta::io::IndexedReader::new(inner, index.clone());
-    let lead = params.lead_in();
-    let window = window_bases.max(2 * lead + 1);
+    let lead = config.lead_in();
+    let window = config.window_bases.max(2 * lead + 1);
     let mut stats = RunStats::default();
 
     for record in index.as_ref() {
@@ -207,9 +239,7 @@ where
                 &name,
                 &pieces,
                 read_start - 1,
-                params,
-                chunk_scores,
-                batch,
+                config,
                 Some((own_start, own_end)),
                 &mut emit,
             )?;
@@ -263,6 +293,22 @@ mod tests {
             step_b: 5,
             step_c: 15,
             curve_scale: 0.33335,
+        }
+    }
+
+    /// A small symmetry window, so test inputs need not be thousands of bases long.
+    fn sym() -> SymParams {
+        SymParams { win: 20, step: 1 }
+    }
+
+    fn config(stage: Stage, chunk_scores: usize, window_bases: usize) -> ScanConfig {
+        ScanConfig {
+            params: params(),
+            sym: sym(),
+            stage,
+            chunk_scores,
+            batch: 4,
+            window_bases,
         }
     }
 
@@ -338,14 +384,15 @@ mod tests {
         // are chosen small and awkward so that pieces and gaps straddle their edges.
         let path = write_fasta_and_index("agree");
         let index = load_index(&path).unwrap().expect("index should be found");
-        let p = params();
 
-        let (plain, plain_stats) = collect(|emit| for_each_score(&path, &p, 1000, 4, emit));
+        let (plain, plain_stats) =
+            collect(|emit| for_each_score(&path, &config(Stage::Curvature, 1000, 0), emit));
         assert!(plain.len() > 5000, "test input too small to be meaningful");
 
-        for window in [2 * p.lead_in() + 1, 97, 1000, 7919, 1 << 20] {
-            let (windowed, windowed_stats) =
-                collect(|emit| for_each_score_indexed(&path, &index, &p, 1000, 4, window, emit));
+        for window in [2 * params().lead_in() + 1, 97, 1000, 7919, 1 << 20] {
+            let (windowed, windowed_stats) = collect(|emit| {
+                for_each_score_indexed(&path, &index, &config(Stage::Curvature, 1000, window), emit)
+            });
             assert_eq!(
                 windowed.len(),
                 plain.len(),
@@ -367,8 +414,9 @@ mod tests {
     fn test_positions_are_emitted_in_order_and_without_duplicates() {
         let path = write_fasta_and_index("order");
         let index = load_index(&path).unwrap().unwrap();
-        let (out, _) =
-            collect(|emit| for_each_score_indexed(&path, &index, &params(), 500, 4, 331, emit));
+        let (out, _) = collect(|emit| {
+            for_each_score_indexed(&path, &index, &config(Stage::Curvature, 500, 331), emit)
+        });
         let mut by_chrom: Vec<(&str, usize)> =
             out.iter().map(|(c, p, _)| (c.as_str(), *p)).collect();
         let before = by_chrom.len();
