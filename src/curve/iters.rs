@@ -964,4 +964,33 @@ mod tests {
         assert_relative_eq!(curves[6], 3.3483, epsilon = 1e-4);
         assert_relative_eq!(curves[7], 3.1042, epsilon = 1e-4);
     }
+
+    #[test]
+    fn test_curve_iter_is_case_insensitive() {
+        // Soft-masked sequence must score identically to the same sequence unmasked.
+        // Before non-ACGT handling was added, the lowercase run panicked in the
+        // matrix lookup rather than producing a value at all.
+        let upper = b"CCAACATTTTGACTTTTTGGGAGGGCACTAGCACCTATCTACCCTGAATC";
+        let mixed = b"CCAACATTTTgacttttTGGGAGGGCACTagcacctatcTACCCTGAATC";
+        assert_eq!(upper.len(), mixed.len());
+
+        let curve = |seq: &[u8]| -> Vec<f64> {
+            CurveIter::new(
+                seq.iter().copied(),
+                matrix::RollType::Simple,
+                5,
+                15,
+                0.33335,
+            )
+            .collect()
+        };
+
+        let from_upper = curve(upper);
+        let from_mixed = curve(mixed);
+        assert_eq!(from_upper.len(), from_mixed.len());
+        assert!(!from_upper.is_empty());
+        for (u, m) in from_upper.iter().zip(&from_mixed) {
+            assert_relative_eq!(u, m, epsilon = 1e-12);
+        }
+    }
 }

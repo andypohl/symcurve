@@ -26,12 +26,27 @@ impl RecordPiece {
     }
 }
 
-#[allow(dead_code)]
-/// Given a record, split the sequence by runs of Ns.
+/// Returns true for any base that cannot be scored and must therefore break the sequence.
 ///
-/// Returns a vector of records, each with a sequence that does not contain any Ns.
-/// The description of each record is set to the start-end position of the sequence,
-/// the positions being 1-based.
+/// A, C, G and T are scoreable in either case: RepeatMasker lowercases repetitive regions,
+/// but soft-masking is an annotation rather than missing data, so `acgt` is ordinary
+/// sequence. Everything else -- `N` and the IUPAC ambiguity codes (R, Y, S, W, K, M, B,
+/// D, H, V) -- represents a base that is genuinely unknown.
+fn is_gap(base: u8) -> bool {
+    !matches!(base.to_ascii_uppercase(), b'A' | b'C' | b'G' | b'T')
+}
+
+#[allow(dead_code)]
+/// Given a record, split the sequence at runs of unscoreable bases.
+///
+/// Returns a vector of pieces, each covering a stretch of sequence that contains only
+/// A, C, G and T (in either case). Runs of `N` or IUPAC ambiguity codes are dropped, and
+/// the sequence is split there. Each piece records its own start-end position in the
+/// original record, the positions being 1-based.
+///
+/// Splitting matters because curvature is computed from a sliding window over a running
+/// sum of coordinates. Merely deleting the unknown bases would let a window span the gap
+/// and derive a value from bases that are far apart in the real sequence.
 ///
 /// Input:
 /// ```text
@@ -48,7 +63,7 @@ impl RecordPiece {
 /// >chr42 13-17
 /// ATGCA
 /// ```
-pub fn split_seq_by_n(record: Record) -> Vec<RecordPiece> {
+pub fn split_seq_by_gaps(record: Record) -> Vec<RecordPiece> {
     // Move the record into a single Rc up front. Every piece then clones this
     // one handle, so they all point at the same allocation. Calling Rc::new
     // per piece would instead allocate a fresh box holding a full copy of the
@@ -61,11 +76,11 @@ pub fn split_seq_by_n(record: Record) -> Vec<RecordPiece> {
     // classic two-pointer approach is tried-and-true
     // but might not be the most idiomatic Rust
     while pos < n {
-        while (pos < n) && (seq[pos] == b'N') {
+        while (pos < n) && is_gap(seq[pos]) {
             pos += 1;
         }
         let left = pos;
-        while (pos < n) && (seq[pos] != b'N') {
+        while (pos < n) && !is_gap(seq[pos]) {
             pos += 1;
         }
         let right = pos;
@@ -83,6 +98,8 @@ pub fn split_seq_by_n(record: Record) -> Vec<RecordPiece> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::curve::matrix;
+    use approx::assert_relative_eq;
 
     #[test]
     fn test_read_fasta() {
@@ -116,7 +133,7 @@ mod tests {
         let mut reader = noodles_fasta::io::Reader::new(&src[..]);
         let split_records: Vec<_> = reader
             .records()
-            .flat_map(|rec| split_seq_by_n(rec.unwrap()))
+            .flat_map(|rec| split_seq_by_gaps(rec.unwrap()))
             .collect();
         assert_eq!(split_records.len(), 2);
         assert_eq!(split_records[0].sequence().as_ref(), b"ATGCATGC".to_vec());
@@ -133,7 +150,7 @@ mod tests {
         let src = b">chr42\nACGTNNACGTNNACGTNNACGT\n";
         let mut reader = noodles_fasta::io::Reader::new(&src[..]);
         let record = reader.records().next().unwrap().unwrap();
-        let pieces = split_seq_by_n(record);
+        let pieces = split_seq_by_gaps(record);
         assert_eq!(pieces.len(), 4);
         // One allocation, one handle per piece.
         assert_eq!(Rc::strong_count(&pieces[0].record), 4);
@@ -148,12 +165,89 @@ mod tests {
     }
 
     #[test]
+    fn test_softmasked_bases_are_kept() {
+        // Lowercase acgt is soft-masked repeat sequence, not missing data, so it must
+        // flow through as ordinary sequence rather than splitting the record.
+        let src = b">chr42\nACGTacgtACGT\n";
+        let mut reader = noodles_fasta::io::Reader::new(&src[..]);
+        let record = reader.records().next().unwrap().unwrap();
+        let pieces = split_seq_by_gaps(record);
+        assert_eq!(pieces.len(), 1);
+        assert_eq!(pieces[0].sequence().as_ref(), b"ACGTacgtACGT".to_vec());
+        assert_eq!(usize::from(pieces[0].start), 1);
+        assert_eq!(usize::from(pieces[0].end), 12);
+    }
+
+    #[test]
+    fn test_softmasked_bases_score_as_their_uppercase_form() {
+        // The lookup must agree across cases, or soft-masked regions would yield
+        // different curvature than the same sequence unmasked.
+        for (upper, lower) in [(b"ACG", b"acg"), (b"TTT", b"ttt"), (b"CCA", b"cca")] {
+            assert_relative_eq!(
+                matrix::matrix_lookup(upper, &matrix::ROLL_SIMPLE).unwrap(),
+                matrix::matrix_lookup(lower, &matrix::ROLL_SIMPLE).unwrap(),
+                epsilon = 1e-12
+            );
+        }
+    }
+
+    #[test]
+    fn test_ambiguity_codes_split_like_n() {
+        // R and Y are genuinely unknown bases. Before this they reached the matrix
+        // lookup and panicked; now they gap-split exactly as N does.
+        let src = b">chr42\nACGTRYACGT\n";
+        let mut reader = noodles_fasta::io::Reader::new(&src[..]);
+        let record = reader.records().next().unwrap().unwrap();
+        let pieces = split_seq_by_gaps(record);
+        assert_eq!(pieces.len(), 2);
+        assert_eq!(pieces[0].sequence().as_ref(), b"ACGT".to_vec());
+        assert_eq!(pieces[1].sequence().as_ref(), b"ACGT".to_vec());
+        assert_eq!(usize::from(pieces[1].start), 7);
+        assert_eq!(usize::from(pieces[1].end), 10);
+    }
+
+    #[test]
+    fn test_every_iupac_code_is_a_gap() {
+        for &code in b"NRYSWKMBDHVnryswkmbdhv" {
+            assert!(is_gap(code), "{:?} should be a gap", code as char);
+        }
+        for &code in b"ACGTacgt" {
+            assert!(!is_gap(code), "{:?} should not be a gap", code as char);
+        }
+    }
+
+    #[test]
+    fn test_mixed_gaps_and_softmasking() {
+        // A realistic shape: soft-masked repeat, an assembly gap, an ambiguity code.
+        let src = b">chr42\nACGTacgtNNNNacgtRACGT\n";
+        let mut reader = noodles_fasta::io::Reader::new(&src[..]);
+        let record = reader.records().next().unwrap().unwrap();
+        let pieces = split_seq_by_gaps(record);
+        assert_eq!(pieces.len(), 3);
+        assert_eq!(pieces[0].sequence().as_ref(), b"ACGTacgt".to_vec());
+        assert_eq!(pieces[1].sequence().as_ref(), b"acgt".to_vec());
+        assert_eq!(pieces[2].sequence().as_ref(), b"ACGT".to_vec());
+    }
+
+    #[test]
+    fn test_lookup_rejects_unknown_base_distinctly() {
+        // The two failure modes used to be conflated under "must be of length 3".
+        let bad_base = matrix::matrix_lookup(b"AAN", &matrix::ROLL_SIMPLE).unwrap_err();
+        assert!(
+            bad_base.to_string().contains("unrecognized nucleotide"),
+            "got: {bad_base}"
+        );
+        let bad_len = matrix::matrix_lookup(b"AA", &matrix::ROLL_SIMPLE).unwrap_err();
+        assert!(bad_len.to_string().contains("length 3"), "got: {bad_len}");
+    }
+
+    #[test]
     fn test_splitting_empty() {
         let src = b">chr42\n\n";
         let mut reader = noodles_fasta::io::Reader::new(&src[..]);
         let split_records: Vec<_> = reader
             .records()
-            .flat_map(|rec| split_seq_by_n(rec.unwrap()))
+            .flat_map(|rec| split_seq_by_gaps(rec.unwrap()))
             .collect();
         assert_eq!(split_records.len(), 0);
     }

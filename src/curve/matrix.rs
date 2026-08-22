@@ -94,43 +94,58 @@ pub(crate) enum RollType {
     Active,
 }
 
+/// Maps a nucleotide to its index in a `NucMatrix`.
+///
+/// Accepts either case, so soft-masked sequence (RepeatMasker lowercases repetitive
+/// regions) is treated as ordinary sequence rather than as unknown bases. Returns
+/// `None` for anything that is not A, C, G, or T, which includes `N` and the IUPAC
+/// ambiguity codes; callers are expected to have split those out already.
+pub(crate) fn nuc_index(base: u8) -> Option<usize> {
+    match base.to_ascii_uppercase() {
+        b'A' => Some(0),
+        b'T' => Some(1),
+        b'G' => Some(2),
+        b'C' => Some(3),
+        _ => None,
+    }
+}
+
 /// Looks up a value in a nucleotide matrix based on a triplet of nucleotides.
 ///
 /// This function takes a triplet of nucleotides and a nucleotide matrix, and returns the value
 /// at the corresponding position in the matrix. The triplet is expected to contain the ASCII
-/// values of 'A', 'C', 'G', or 'T'.  
+/// values of 'A', 'C', 'G', or 'T', in either case.
 ///
 /// # Arguments
 ///
 /// * `triplet` - A slice of u8 representing a triplet of nucleotides. Each u8 should be the ASCII
-///   value of 'A', 'C', 'G', or 'T'.
+///   value of 'A', 'C', 'G', or 'T', upper or lower case.
 /// * `matrix` - A reference to a `NucMatrix` to look up the value in.
 ///
 /// # Returns
 ///
-/// If the triplet is valid and of length 3, this function returns a `Result` containing the value
-/// at the corresponding position in the matrix. If the triplet is not valid or not of length 3,
-/// it returns a `Result` containing a `MatrixLookupError`.
+/// If the triplet is of length 3 and every base is recognized, this function returns a `Result`
+/// containing the value at the corresponding position in the matrix. Otherwise it returns a
+/// `Result` containing a `MatrixLookupError`.
 ///
 /// # Errors
 ///
-/// Returns a `MatrixLookupError` if the triplet is not of length 3.  An unrecognized nucleotide
-/// will cause this error because the triplet will not be of length 3.
+/// Returns a `MatrixLookupError` if the triplet is not of length 3, or if it contains a base
+/// that is not A, C, G, or T. These are reported as distinct errors rather than being conflated.
 pub(crate) fn matrix_lookup(triplet: &[u8], matrix: &NucMatrix) -> Result<f64, MatrixLookupError> {
-    let ixs: Vec<usize> = triplet
-        .iter()
-        .filter_map(|&x| match x {
-            b'A' => Some(0),
-            b'T' => Some(1),
-            b'G' => Some(2),
-            b'C' => Some(3),
-            _ => None,
-        })
-        .collect();
-    if ixs.len() != 3 {
-        return Err(MatrixLookupError {
-            details: "triplet must be of length 3".to_string(),
-        });
+    let [a, b, c] = match triplet {
+        [a, b, c] => [*a, *b, *c],
+        _ => {
+            return Err(MatrixLookupError {
+                details: format!("triplet must be of length 3, got {}", triplet.len()),
+            });
+        }
+    };
+    let mut ixs = [0usize; 3];
+    for (slot, base) in ixs.iter_mut().zip([a, b, c]) {
+        *slot = nuc_index(base).ok_or_else(|| MatrixLookupError {
+            details: format!("unrecognized nucleotide {:?}", base as char),
+        })?;
     }
     Ok(matrix[ixs[0]][ixs[1]][ixs[2]])
 }
