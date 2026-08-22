@@ -139,10 +139,12 @@ mod tests {
         let args_result =
             Cli::try_parse_from(["symcurve", "input.fasta", "output.bw", "--curve-step", "0"]);
         assert!(args_result.is_err());
-        assert!(args_result
-            .unwrap_err()
-            .to_string()
-            .starts_with("error: invalid value '0' for '--curve-step"));
+        assert!(
+            args_result
+                .unwrap_err()
+                .to_string()
+                .starts_with("error: invalid value '0' for '--curve-step")
+        );
     }
 
     // helper to test_curve_scale()

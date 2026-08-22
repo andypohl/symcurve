@@ -3,8 +3,8 @@
 use std::rc::Rc;
 
 use noodles_core::Position;
-use noodles_fasta::record::Sequence;
 use noodles_fasta::Record;
+use noodles_fasta::record::Sequence;
 
 /// One Record will be split into multiple RecordPieces.
 /// The original Record is kept as an Rc so that each of the
