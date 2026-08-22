@@ -107,3 +107,61 @@ fn test_unknown_output_extension_is_rejected() {
     );
     std::fs::remove_file(&input).ok();
 }
+
+#[test]
+fn test_max_memory_changes_chunking_without_changing_the_answer() {
+    // A small budget makes chunks smaller, which changes how far twist accumulates
+    // within a chunk and so perturbs the last digit of some scores. Positions must be
+    // unaffected and values must agree to well within the precision bigWig stores.
+    let input = write_fasta("budget");
+    let big = tmp_path("budget-big.bedGraph");
+    let small = tmp_path("budget-small.bedGraph");
+
+    for (out, budget) in [(&big, "8G"), (&small, "1M")] {
+        let status = Command::new(EXE)
+            .args([
+                input.to_str().unwrap(),
+                out.to_str().unwrap(),
+                "--max-memory",
+                budget,
+            ])
+            .status()
+            .expect("failed to run");
+        assert!(status.success(), "run with --max-memory {budget} failed");
+    }
+
+    let a = std::fs::read_to_string(&big).unwrap();
+    let b = std::fs::read_to_string(&small).unwrap();
+    let a: Vec<&str> = a.lines().collect();
+    let b: Vec<&str> = b.lines().collect();
+    assert_eq!(a.len(), b.len(), "different number of scores");
+    assert!(!a.is_empty());
+
+    for (la, lb) in a.iter().zip(&b) {
+        let fa: Vec<&str> = la.split('\t').collect();
+        let fb: Vec<&str> = lb.split('\t').collect();
+        assert_eq!(fa[..3], fb[..3], "positions differ");
+        let (va, vb) = (fa[3].parse::<f64>().unwrap(), fb[3].parse::<f64>().unwrap());
+        let rel = (va - vb).abs() / va.abs().max(1e-12);
+        assert!(rel < 1e-5, "{va} vs {vb} differ by {rel}");
+    }
+
+    std::fs::remove_file(&input).ok();
+    std::fs::remove_file(&big).ok();
+    std::fs::remove_file(&small).ok();
+}
+
+#[test]
+fn test_bad_max_memory_is_rejected() {
+    let out = tmp_path("badmem-out.bedGraph");
+    let output = Command::new(EXE)
+        .args(["in.fa", out.to_str().unwrap(), "--max-memory", "lots"])
+        .output()
+        .expect("failed to run");
+    assert!(!output.status.success());
+    let err = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        err.contains("8G"),
+        "error should show the expected form: {err}"
+    );
+}

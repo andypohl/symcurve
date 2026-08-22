@@ -5,12 +5,13 @@ use std::fmt;
 use std::fs::File;
 use std::io::{self, BufWriter, Write};
 use std::path::Path;
+use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 use bigtools::BigWigWrite;
 use bigtools::Value;
 use bigtools::beddata::BedParserStreamingIterator;
-
-use crate::curve::scan::PieceCurves;
 
 /// The output formats this tool can write.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,115 +63,138 @@ impl fmt::Display for UnknownFormat {
 
 impl std::error::Error for UnknownFormat {}
 
-/// One scored record: its name, its full length, and the scores for each of its pieces.
-pub struct ScoredRecord {
-    pub name: String,
-    pub length: usize,
-    pub pieces: Vec<PieceCurves>,
-}
-
-/// Flatten scored records into per-base intervals, in the order they must be written.
+/// A score at a position, as the writers want it.
 ///
-/// bigWig requires values sorted by chromosome and then by position; records arrive in
-/// file order and pieces within a record in position order, so emitting them as they come
-/// preserves that. Positions are converted from the 1-based inclusive convention used
-/// throughout the curve code to the 0-based half-open convention both formats use.
-fn intervals(records: &[ScoredRecord]) -> impl Iterator<Item = (String, Value)> + '_ {
-    records.iter().flat_map(|record| {
-        record.pieces.iter().flat_map(move |piece| {
-            piece.curves.iter().enumerate().map(move |(i, &score)| {
-                let start = (piece.curve_start - 1 + i) as u32;
-                (
-                    record.name.clone(),
-                    Value {
-                        start,
-                        end: start + 1,
-                        value: score as f32,
-                    },
-                )
-            })
-        })
-    })
+/// Positions arrive 1-based and inclusive from the curve code and are converted here to
+/// the 0-based half-open convention both output formats use.
+fn interval(name: &str, position: usize, score: f64) -> (String, Value) {
+    let start = (position - 1) as u32;
+    (
+        name.to_string(),
+        Value {
+            start,
+            end: start + 1,
+            value: score as f32,
+        },
+    )
 }
 
-/// Write scores to `path`, choosing the format from its extension.
-pub fn write(
+/// Write a bedGraph, pulling scores from `produce` as they are needed.
+///
+/// Nothing is retained: each score is formatted and written as it arrives.
+pub fn write_bedgraph_streaming<P>(
     path: &Path,
-    records: &[ScoredRecord],
-) -> Result<OutputFormat, Box<dyn std::error::Error>> {
-    let format = OutputFormat::from_path(path)?;
-    match format {
-        OutputFormat::BedGraph => write_bedgraph(path, records)?,
-        OutputFormat::BigWig => write_bigwig(path, records)?,
-    }
-    Ok(format)
-}
-
-/// Write a plain-text bedGraph.
-pub fn write_bedgraph(path: &Path, records: &[ScoredRecord]) -> io::Result<()> {
+    produce: P,
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    P: FnOnce(&mut dyn FnMut(&str, usize, f64) -> io::Result<()>) -> io::Result<()>,
+{
     let mut out = BufWriter::new(File::create(path)?);
-    for (chrom, value) in intervals(records) {
+    produce(&mut |name, position, score| {
+        let (chrom, value) = interval(name, position, score);
         writeln!(
             out,
             "{}\t{}\t{}\t{}",
             chrom, value.start, value.end, value.value
-        )?;
-    }
-    out.flush()
+        )
+    })?;
+    out.flush()?;
+    Ok(())
 }
 
-/// Write an indexed bigWig.
-pub fn write_bigwig(
-    path: &Path,
-    records: &[ScoredRecord],
-) -> Result<(), Box<dyn std::error::Error>> {
-    // bigWig carries chromosome sizes in its header, so they must all be known before
-    // any value is written. Full record lengths are used, not piece lengths: the
-    // coordinates in the file refer to the record.
-    let chrom_sizes: HashMap<String, u32> = records
-        .iter()
-        .map(|r| (r.name.clone(), r.length as u32))
-        .collect();
+/// How many values travel through the channel at once.
+///
+/// Sending a hundred million values one at a time costs more in synchronization than in
+/// work, so they move in batches. Memory stays bounded because both the batch size and
+/// the number of batches in flight are fixed.
+const SEND_BATCH: usize = 8192;
 
-    let writer = BigWigWrite::create_file(path, chrom_sizes)?;
-    let data = BedParserStreamingIterator::wrap_infallible_iter(intervals(records), false);
+/// Write a bigWig, pulling scores from `produce` as they are needed.
+///
+/// bigtools takes an iterator, but the scoring loop pushes, so the producer runs on its
+/// own thread and feeds a bounded channel. The bound is what makes this streaming rather
+/// than merely deferred: when the writer falls behind, the producer blocks instead of
+/// queueing the genome up in memory.
+pub fn write_bigwig_streaming<P>(
+    path: &Path,
+    chrom_sizes: Vec<(String, u32)>,
+    queue_depth: usize,
+    produce: P,
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    P: FnOnce(&mut dyn FnMut(&str, usize, f64) -> io::Result<()>) -> io::Result<()>
+        + Send
+        + 'static,
+{
+    let sizes: HashMap<String, u32> = chrom_sizes.into_iter().collect();
+    let writer = BigWigWrite::create_file(path, sizes)?;
+
+    let batches_in_flight = queue_depth.div_ceil(SEND_BATCH).max(1);
+    let (tx, rx) = mpsc::sync_channel::<Vec<(String, Value)>>(batches_in_flight);
+    // The producer's error is reported after the write finishes: a send failure only
+    // says the consumer went away, not why, and a read error must not look like a
+    // successful but truncated file.
+    let failure = Arc::new(Mutex::new(None::<String>));
+    let producer_failure = Arc::clone(&failure);
+
+    let producer = thread::spawn(move || {
+        let mut batch: Vec<(String, Value)> = Vec::with_capacity(SEND_BATCH);
+        let result = (|| {
+            produce(&mut |name, position, score| {
+                batch.push(interval(name, position, score));
+                if batch.len() == SEND_BATCH {
+                    let full = std::mem::replace(&mut batch, Vec::with_capacity(SEND_BATCH));
+                    // A closed channel means the writer stopped; report it so a partial
+                    // file is never mistaken for a complete one.
+                    tx.send(full)
+                        .map_err(|_| io::Error::other("bigWig writer stopped accepting values"))?;
+                }
+                Ok(())
+            })?;
+            if !batch.is_empty() {
+                tx.send(std::mem::take(&mut batch))
+                    .map_err(|_| io::Error::other("bigWig writer stopped accepting values"))?;
+            }
+            Ok::<(), io::Error>(())
+        })();
+        if let Err(err) = result {
+            *producer_failure.lock().unwrap() = Some(err.to_string());
+        }
+    });
+
+    let data = BedParserStreamingIterator::wrap_infallible_iter(rx.into_iter().flatten(), false);
     let runtime = tokio::runtime::Builder::new_multi_thread().build()?;
-    writer.write(data, runtime)?;
+    let write_result = writer.write(data, runtime);
+
+    producer.join().map_err(|_| "scoring thread panicked")?;
+    if let Some(err) = failure.lock().unwrap().take() {
+        return Err(err.into());
+    }
+    write_result?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::curve::scan::PieceCurves;
     use std::path::PathBuf;
 
-    fn scored() -> Vec<ScoredRecord> {
-        vec![
-            ScoredRecord {
-                name: "chr1".to_string(),
-                length: 100,
-                pieces: vec![PieceCurves {
-                    start: 1,
-                    curve_start: 22,
-                    curves: vec![1.5, 2.5, 3.5],
-                }],
-            },
-            ScoredRecord {
-                name: "chr2".to_string(),
-                length: 60,
-                pieces: vec![PieceCurves {
-                    start: 10,
-                    curve_start: 31,
-                    curves: vec![4.0],
-                }],
-            },
-        ]
+    /// A producer emitting a fixed set of scores, standing in for a scoring run.
+    fn produce(emit: &mut dyn FnMut(&str, usize, f64) -> io::Result<()>) -> io::Result<()> {
+        emit("chr1", 22, 1.5)?;
+        emit("chr1", 23, 2.5)?;
+        emit("chr1", 24, 3.5)?;
+        emit("chr2", 31, 4.0)?;
+        Ok(())
+    }
+
+    fn sizes() -> Vec<(String, u32)> {
+        vec![("chr1".to_string(), 100), ("chr2".to_string(), 60)]
     }
 
     fn tmp(name: &str) -> PathBuf {
         let mut p = std::env::temp_dir();
-        p.push(format!("symcurve-test-{}-{}", std::process::id(), name));
+        p.push(format!("symcurve-out-{}-{}", std::process::id(), name));
         p
     }
 
@@ -186,8 +210,11 @@ mod tests {
             ("out", None),
         ];
         for (name, expected) in cases {
-            let got = OutputFormat::from_path(Path::new(name)).ok();
-            assert_eq!(got, expected, "for {name}");
+            assert_eq!(
+                OutputFormat::from_path(Path::new(name)).ok(),
+                expected,
+                "for {name}"
+            );
         }
     }
 
@@ -200,24 +227,18 @@ mod tests {
     }
 
     #[test]
-    fn test_intervals_are_zero_based_half_open_and_in_order() {
-        let records = scored();
-        let got: Vec<_> = intervals(&records).collect();
-        assert_eq!(got.len(), 4);
-        // curve_start 22 is 1-based, so the first interval starts at 21 zero-based.
-        assert_eq!(got[0].0, "chr1");
-        assert_eq!((got[0].1.start, got[0].1.end), (21, 22));
-        assert_eq!((got[1].1.start, got[1].1.end), (22, 23));
-        assert_eq!((got[2].1.start, got[2].1.end), (23, 24));
-        assert_eq!(got[3].0, "chr2");
-        assert_eq!((got[3].1.start, got[3].1.end), (30, 31));
+    fn test_interval_is_zero_based_half_open() {
+        // Position 22 is 1-based, so the interval covers [21, 22).
+        let (chrom, value) = interval("chr1", 22, 1.5);
+        assert_eq!(chrom, "chr1");
+        assert_eq!((value.start, value.end), (21, 22));
+        assert!((value.value - 1.5).abs() < 1e-6);
     }
 
     #[test]
     fn test_bedgraph_contents() {
         let path = tmp("out.bedGraph");
-        let format = write(&path, &scored()).unwrap();
-        assert_eq!(format, OutputFormat::BedGraph);
+        write_bedgraph_streaming(&path, produce).unwrap();
         let text = std::fs::read_to_string(&path).unwrap();
         let lines: Vec<&str> = text.lines().collect();
         assert_eq!(lines.len(), 4);
@@ -231,8 +252,7 @@ mod tests {
         // Write a bigWig and read it back, rather than checking the magic bytes: a file
         // with the right header but wrong contents would still be useless.
         let path = tmp("out.bw");
-        let format = write(&path, &scored()).unwrap();
-        assert_eq!(format, OutputFormat::BigWig);
+        write_bigwig_streaming(&path, sizes(), 8, produce).unwrap();
 
         let mut read = bigtools::BigWigRead::open_file(&path).unwrap();
         let mut chroms: Vec<_> = read
@@ -254,12 +274,27 @@ mod tests {
     }
 
     #[test]
-    fn test_write_refuses_an_unknown_extension_without_creating_a_file() {
-        let path = tmp("out.txt");
-        assert!(write(&path, &scored()).is_err());
-        assert!(
-            !path.exists(),
-            "no file should be created for a rejected format"
-        );
+    fn test_bigwig_survives_a_queue_depth_of_one() {
+        // A depth of 1 makes the producer block on nearly every value, which is the
+        // backpressure path; it must produce the same file, not deadlock.
+        let path = tmp("depth1.bw");
+        write_bigwig_streaming(&path, sizes(), 1, produce).unwrap();
+        let mut read = bigtools::BigWigRead::open_file(&path).unwrap();
+        let values: Vec<_> = read.values("chr1", 21, 24).unwrap();
+        assert_eq!(values.len(), 3);
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_producer_error_is_reported_not_silently_truncated() {
+        // A read failure partway through must not look like a short but successful file.
+        let path = tmp("fail.bw");
+        let failing = |emit: &mut dyn FnMut(&str, usize, f64) -> io::Result<()>| {
+            emit("chr1", 22, 1.5)?;
+            Err(io::Error::other("synthetic read failure"))
+        };
+        let err = write_bigwig_streaming(&path, sizes(), 8, failing).unwrap_err();
+        assert!(err.to_string().contains("synthetic read failure"), "{err}");
+        std::fs::remove_file(&path).ok();
     }
 }

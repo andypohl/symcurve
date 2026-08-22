@@ -23,6 +23,7 @@
 //!       --symcurve-win <SYMCURVE_WIN>        symcurve window [default: 101]
 //!       --symcurve-step <SYMCURVE_STEP>      symcurve step [default: 1]
 //!       --min-linker-size <MIN_LINKER_SIZE>  minimum linker size [default: 30]
+//!       --max-memory <MAX_MEMORY>            score buffer budget [default: 8G]
 //!   -h, --help                               Print help
 //!   -V, --version                            Print version
 //! ```
@@ -74,6 +75,10 @@ pub struct Cli {
     /// minimum linker size
     #[arg(long, default_value = "30", value_parser = clap::value_parser!(u16).range(1..))]
     pub min_linker_size: u16,
+
+    /// upper bound on memory used to buffer scores, e.g. 8G, 512M, 64K
+    #[arg(long, default_value = "8G")]
+    pub max_memory: crate::memory::MemoryBudget,
 }
 
 fn parse_float_in_range(s: &str) -> Result<f32, String> {
@@ -156,6 +161,22 @@ mod tests {
             "--curve-scale",
             curve_scale_s,
         ])
+    }
+
+    #[test]
+    fn test_max_memory_parses_and_defaults() {
+        let args = Cli::parse_from(["symcurve", "in.fa", "out.bw"]);
+        assert_eq!(args.max_memory.to_string(), "8G");
+
+        let args = Cli::parse_from(["symcurve", "in.fa", "out.bw", "--max-memory", "512M"]);
+        assert_eq!(args.max_memory.bytes(), 512 * 1024 * 1024);
+
+        let bad = Cli::try_parse_from(["symcurve", "in.fa", "out.bw", "--max-memory", "lots"]);
+        assert!(bad.is_err());
+        assert!(
+            bad.unwrap_err().to_string().contains("8G"),
+            "the error should show the expected form"
+        );
     }
 
     #[test]

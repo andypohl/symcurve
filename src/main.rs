@@ -1,16 +1,14 @@
 //! The symcurve command line tool.
 
 use std::error::Error;
-use std::fs::File;
-use std::io::BufReader;
 
 use clap::Parser;
 
 use symcurve::cli::Cli;
 use symcurve::curve::matrix::RollType;
-use symcurve::curve::scan::{CurveParams, score_pieces};
-use symcurve::fasta::split_seq_by_gaps;
-use symcurve::output::{self, OutputFormat, ScoredRecord};
+use symcurve::curve::scan::{CurveParams, DEFAULT_CHUNK_SCORES};
+use symcurve::output::{self, OutputFormat};
+use symcurve::stream;
 
 fn main() {
     if let Err(err) = run() {
@@ -31,41 +29,45 @@ fn run() -> Result<(), Box<dyn Error>> {
     let params = curve_params(&args);
     warn_about_unused_arguments(&args, &params);
 
-    let file = File::open(&args.input)
-        .map_err(|e| format!("cannot open {}: {e}", args.input.display()))?;
-    let mut reader = noodles_fasta::io::Reader::new(BufReader::new(file));
-
-    let mut scored = Vec::new();
-    for result in reader.records() {
-        let record = result?;
-        let name = String::from_utf8_lossy(record.name()).into_owned();
-        let length = record.sequence().len();
-        let pieces = split_seq_by_gaps(record);
-        let curves = score_pieces(&pieces, &params);
-        if args.verbose {
-            let scores: usize = curves.iter().map(|p| p.curves.len()).sum();
-            eprintln!(
-                "{name}: {length} bases, {} pieces, {scores} scores",
-                pieces.len()
-            );
-        }
-        scored.push(ScoredRecord {
-            name,
-            length,
-            pieces: curves,
-        });
+    let threads = rayon::current_num_threads();
+    let chunk_scores = args.max_memory.chunk_scores(threads, DEFAULT_CHUNK_SCORES);
+    if args.verbose {
+        eprintln!(
+            "budget {} over {threads} threads: {chunk_scores} scores per chunk",
+            args.max_memory
+        );
     }
 
-    output::write(&args.output, &scored)?;
+    let input = args.input.clone();
+    let verbose = args.verbose;
+    let produce = move |emit: &mut dyn FnMut(&str, usize, f64) -> std::io::Result<()>| {
+        let stats = stream::for_each_score(&input, &params, chunk_scores, threads, emit)?;
+        if verbose {
+            eprintln!(
+                "{} records, {} pieces, {} scores; largest record {} bases",
+                stats.records, stats.pieces, stats.scores, stats.longest_record
+            );
+        }
+        Ok(())
+    };
+
+    match format {
+        OutputFormat::BedGraph => output::write_bedgraph_streaming(&args.output, produce)?,
+        OutputFormat::BigWig => {
+            // The header needs every chromosome size before any value, so names and
+            // lengths are read in a first pass that keeps no sequence.
+            let sizes = stream::chrom_sizes(&args.input)
+                .map_err(|e| format!("cannot read {}: {e}", args.input.display()))?;
+            // Keep roughly a chunk's worth of values queued: enough to keep the writer
+            // fed, bounded so a slow writer cannot let the queue grow without limit.
+            let queue_depth = chunk_scores.min(1 << 16);
+            output::write_bigwig_streaming(&args.output, sizes, queue_depth, produce)?
+        }
+    }
 
     if args.verbose {
-        let total: usize = scored
-            .iter()
-            .map(|r| r.pieces.iter().map(|p| p.curves.len()).sum::<usize>())
-            .sum();
         eprintln!(
-            "wrote {total} scores for {} records to {} as {}",
-            scored.len(),
+            "wrote {} as {}",
             args.output.display(),
             match format {
                 OutputFormat::BigWig => "bigWig",
