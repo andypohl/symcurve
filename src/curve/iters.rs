@@ -380,8 +380,8 @@ where
             let adj_y_roll_sum = self.y_roll_sum
                 - (0.5 * self.buffer.front().unwrap().y)
                 - (0.5 * self.buffer.back().unwrap().y);
-            let x_bar = adj_x_roll_sum / (window_size as f64 - 1 as f64);
-            let y_bar = adj_y_roll_sum / (window_size as f64 - 1 as f64);
+            let x_bar = adj_x_roll_sum / (window_size as f64 - 1_f64);
+            let y_bar = adj_y_roll_sum / (window_size as f64 - 1_f64);
             let result = Some(RollMeanData { x_bar, y_bar });
             let item = self.buffer.pop_front().unwrap();
             self.x_roll_sum -= item.x;
@@ -407,7 +407,7 @@ trait RollMeanIterator: Iterator<Item = CoordsData> + Sized {
     /// # Parameters
     ///
     /// * `step_size`: half of the window size minus one. In other words, 2 * `step_size` + 1 is
-    ///  the size of the window.
+    ///   the size of the window.
     ///
     /// # Returns
     ///
@@ -525,7 +525,7 @@ impl<I: Iterator<Item = u8>> Iterator for CurveIter<I> {
 /// * `seq_iter`: An iterator that yields `u8`.
 /// * `roll_type`: The type of roll (either simple or activated).
 /// * `step_b`: Half of the window size minus one. In other words, 2 * `step_size` + 1 is
-///  the size of the window.
+///   the size of the window.
 /// * `step_c`: The distance from the midpoint base to the sides in the curve window.
 impl<I: Iterator<Item = u8>> CurveIter<I> {
     fn new(
@@ -725,7 +725,7 @@ mod tests {
 
         x_values
             .into_iter()
-            .zip(y_values.into_iter())
+            .zip(y_values)
             .map(|(x, y)| CoordsData::new(None, x, y))
             .collect()
     }
@@ -834,7 +834,7 @@ mod tests {
 
         x_values
             .into_iter()
-            .zip(y_values.into_iter())
+            .zip(y_values)
             .map(|(x_bar, y_bar)| RollMeanData { x_bar, y_bar })
             .collect()
     }

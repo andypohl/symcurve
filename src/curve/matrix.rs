@@ -103,7 +103,7 @@ pub(crate) enum RollType {
 /// # Arguments
 ///
 /// * `triplet` - A slice of u8 representing a triplet of nucleotides. Each u8 should be the ASCII
-/// value of 'A', 'C', 'G', or 'T'.
+///   value of 'A', 'C', 'G', or 'T'.
 /// * `matrix` - A reference to a `NucMatrix` to look up the value in.
 ///
 /// # Returns
@@ -119,14 +119,13 @@ pub(crate) enum RollType {
 pub(crate) fn matrix_lookup(triplet: &[u8], matrix: &NucMatrix) -> Result<f64, MatrixLookupError> {
     let ixs: Vec<usize> = triplet
         .iter()
-        .map(|&x| match x {
+        .filter_map(|&x| match x {
             b'A' => Some(0),
             b'T' => Some(1),
             b'G' => Some(2),
             b'C' => Some(3),
             _ => None,
         })
-        .flatten()
         .collect();
     if ixs.len() != 3 {
         return Err(MatrixLookupError {
@@ -138,7 +137,6 @@ pub(crate) fn matrix_lookup(triplet: &[u8], matrix: &NucMatrix) -> Result<f64, M
 
 #[cfg(test)]
 mod tests {
-    extern crate approx;
     use approx::assert_relative_eq;
 
     use super::*;

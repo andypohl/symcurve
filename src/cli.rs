@@ -80,7 +80,7 @@ fn parse_float_in_range(s: &str) -> Result<f32, String> {
     let value = s
         .parse::<f32>()
         .map_err(|_| "Value must be a floating-point number")?;
-    if value >= 0.0 && value <= 1.0 {
+    if (0.0..=1.0).contains(&value) {
         Ok(value)
     } else {
         Err("The value must be between 0 and 1".to_owned())
@@ -95,7 +95,7 @@ mod tests {
     #[test]
     fn test_cli_args() {
         // Your test code will go here
-        let args = Cli::parse_from(&[
+        let args = Cli::parse_from([
             "symcurve",
             "input.fasta",
             "output.bw",
@@ -107,7 +107,7 @@ mod tests {
         ]);
         assert_eq!(args.input.to_str().unwrap(), "input.fasta");
         assert_eq!(args.output.to_str().unwrap(), "output.bw");
-        assert_eq!(args.verbose, true);
+        assert!(args.verbose);
         assert_eq!(args.matrices.unwrap().to_str().unwrap(), "matrices.yaml");
         assert_eq!(args.curve_step, 20);
     }
@@ -115,7 +115,7 @@ mod tests {
     #[test]
     fn test_missing_matrix_file() {
         let args_result =
-            Cli::try_parse_from(&["symcurve", "input.fasta", "output.bw", "--matrices"]);
+            Cli::try_parse_from(["symcurve", "input.fasta", "output.bw", "--matrices"]);
         // construct the Error object manually, this probably
         // overkill and the error .to_string() is enough but it's
         // just some practice
@@ -129,7 +129,7 @@ mod tests {
             ContextKind::InvalidValue,
             ContextValue::String("".to_owned()),
         );
-        assert_eq!(args_result.is_err(), true);
+        assert!(args_result.is_err());
         assert_eq!(args_result.unwrap_err().to_string(), err.to_string());
     }
 
@@ -137,8 +137,8 @@ mod tests {
     #[test]
     fn test_zero_curve_step() {
         let args_result =
-            Cli::try_parse_from(&["symcurve", "input.fasta", "output.bw", "--curve-step", "0"]);
-        assert_eq!(args_result.is_err(), true);
+            Cli::try_parse_from(["symcurve", "input.fasta", "output.bw", "--curve-step", "0"]);
+        assert!(args_result.is_err());
         assert!(args_result
             .unwrap_err()
             .to_string()
@@ -147,23 +147,23 @@ mod tests {
 
     // helper to test_curve_scale()
     fn get_different_curve_scale_parsings(curve_scale_s: &str) -> Result<Cli, clap::error::Error> {
-        return Cli::try_parse_from(&[
+        Cli::try_parse_from([
             "symcurve",
             "input.fasta",
             "output.bw",
             "--curve-scale",
             curve_scale_s,
-        ]);
+        ])
     }
 
     #[test]
     fn test_curve_scale() {
         // test different passed in curve scales
-        assert_eq!(get_different_curve_scale_parsings("0").is_ok(), true);
-        assert_eq!(get_different_curve_scale_parsings("0.33").is_ok(), true);
-        assert_eq!(get_different_curve_scale_parsings("1").is_ok(), true);
-        assert_eq!(get_different_curve_scale_parsings("1.1").is_err(), true);
-        assert_eq!(get_different_curve_scale_parsings("-1").is_err(), true);
-        assert_eq!(get_different_curve_scale_parsings("abc").is_err(), true);
+        assert!(get_different_curve_scale_parsings("0").is_ok());
+        assert!(get_different_curve_scale_parsings("0.33").is_ok());
+        assert!(get_different_curve_scale_parsings("1").is_ok());
+        assert!(get_different_curve_scale_parsings("1.1").is_err());
+        assert!(get_different_curve_scale_parsings("-1").is_err());
+        assert!(get_different_curve_scale_parsings("abc").is_err());
     }
 }

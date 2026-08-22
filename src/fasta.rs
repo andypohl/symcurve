@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use noodles_core::Position;
 use noodles_fasta::record::Sequence;
-use noodles_fasta::{self, Record};
+use noodles_fasta::Record;
 
 /// One Record will be split into multiple RecordPieces.
 /// The original Record is kept as an Rc so that each of the
@@ -84,11 +84,11 @@ mod tests {
     fn test_read_fasta() {
         // two sequences
         let src = b">sq0\nACGT\n>sq1\nN\n";
-        let mut reader = noodles_fasta::Reader::new(&src[..]);
+        let mut reader = noodles_fasta::io::Reader::new(&src[..]);
         let first_rec = reader.records().next().unwrap().unwrap();
         let second_rec = reader.records().next().unwrap().unwrap();
-        assert_eq!(first_rec.definition().name(), b"sq0");
-        assert_eq!(second_rec.definition().name(), b"sq1");
+        assert_eq!(first_rec.name(), b"sq0");
+        assert_eq!(second_rec.name(), b"sq1");
         let start = Position::try_from(2).unwrap();
         let end = Position::try_from(3).unwrap();
         assert_eq!(
@@ -109,7 +109,7 @@ mod tests {
     #[test]
     fn test_splitting() {
         let src = b">chr42\nATGCATGCNNNNATGCA\n";
-        let mut reader = noodles_fasta::Reader::new(&src[..]);
+        let mut reader = noodles_fasta::io::Reader::new(&src[..]);
         let split_records: Vec<_> = reader
             .records()
             .flat_map(|rec| split_seq_by_n(rec.unwrap()))
@@ -125,7 +125,7 @@ mod tests {
     #[test]
     fn test_splitting_empty() {
         let src = b">chr42\n\n";
-        let mut reader = noodles_fasta::Reader::new(&src[..]);
+        let mut reader = noodles_fasta::io::Reader::new(&src[..]);
         let split_records: Vec<_> = reader
             .records()
             .flat_map(|rec| split_seq_by_n(rec.unwrap()))
