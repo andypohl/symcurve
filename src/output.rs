@@ -340,4 +340,26 @@ mod tests {
         assert!(err.to_string().contains("synthetic read failure"), "{err}");
         std::fs::remove_file(&path).ok();
     }
+
+    #[test]
+    fn test_bigwig_streaming_flushes_full_batches() {
+        // More values than one send batch, so the mid-run flush runs and not only the
+        // final drain.
+        let n = 2 * SEND_BATCH + 7;
+        let path = tmp("batches.bw");
+        let many = move |emit: &mut dyn FnMut(&str, usize, f64) -> io::Result<()>| {
+            for i in 0..n {
+                emit("chr1", i + 1, i as f64)?;
+            }
+            Ok(())
+        };
+        write_bigwig_streaming(&path, vec![("chr1".to_string(), n as u32)], 8, many).unwrap();
+
+        let mut read = bigtools::BigWigRead::open_file(&path).unwrap();
+        let values: Vec<_> = read.values("chr1", 0, n as u32).unwrap();
+        assert_eq!(values.len(), n);
+        assert_eq!(values[0], 0.0);
+        assert_eq!(values[n - 1], (n - 1) as f32);
+        std::fs::remove_file(&path).ok();
+    }
 }

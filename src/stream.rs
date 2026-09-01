@@ -529,4 +529,36 @@ mod tests {
         std::fs::remove_file(&path).ok();
         std::fs::remove_file(&fai).ok();
     }
+
+    #[test]
+    fn test_zero_length_index_records_are_skipped() {
+        let path = write_fasta_and_index("zerolen");
+        let index = load_index(&path).unwrap().unwrap();
+        let config = config(Stage::Curvature, 1000, 700);
+        let count = |index: &fai::Index| {
+            let n = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let seen = std::sync::Arc::clone(&n);
+            let stats = for_each_score_indexed(&path, index, &config, move |_, _, _| {
+                seen.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                Ok(())
+            })
+            .unwrap();
+            (stats, n.load(std::sync::atomic::Ordering::Relaxed))
+        };
+        let (plain, plain_n) = count(&index);
+
+        // An empty record must be counted but never queried, since there is no range.
+        let mut records: Vec<fai::Record> = index.as_ref().to_vec();
+        let one = std::num::NonZero::new(1).unwrap();
+        records.push(fai::Record::new("empty", 0, 0, one, one));
+        let (padded, n) = count(&fai::Index::from(records));
+        assert_eq!(padded.records, plain.records + 1);
+        assert_eq!(padded.scores, plain.scores);
+        assert_eq!(n, plain_n);
+
+        std::fs::remove_file(&path).ok();
+        let mut fai_path = path.as_os_str().to_owned();
+        fai_path.push(".fai");
+        std::fs::remove_file(PathBuf::from(fai_path)).ok();
+    }
 }

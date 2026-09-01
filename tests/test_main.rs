@@ -339,3 +339,142 @@ fn test_call_stages_require_gff_output() {
     );
     std::fs::remove_file(&input).ok();
 }
+
+/// Write a `.fai` for the single-record, single-line FASTA that `write_fasta` produces.
+fn write_index(fasta: &std::path::Path) -> std::path::PathBuf {
+    let text = std::fs::read_to_string(fasta).unwrap();
+    let mut lines = text.lines();
+    let header = lines.next().unwrap();
+    let seq = lines.next().unwrap();
+    let (name, offset, len) = (&header[1..], header.len() + 1, seq.len());
+    let mut p = fasta.as_os_str().to_owned();
+    p.push(".fai");
+    let p = std::path::PathBuf::from(p);
+    std::fs::write(&p, format!("{name}\t{len}\t{offset}\t{len}\t{}\n", len + 1)).unwrap();
+    p
+}
+
+#[test]
+fn test_inapplicable_arguments_warn_but_do_not_fail() {
+    let input = write_fasta("warn");
+    let out = tmp_path("warn-out.bedGraph");
+    let output = Command::new(EXE)
+        .args([
+            input.to_str().unwrap(),
+            out.to_str().unwrap(),
+            "--curve-step-two",
+            "3",
+            "--matrices",
+            "custom.yaml",
+            "--symcurve-win",
+            "51",
+            "--min-linker-size",
+            "20",
+        ])
+        .output()
+        .expect("failed to run");
+    assert!(output.status.success(), "{:?}", output);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    for needle in [
+        "--curve-step-two 3 is inconsistent",
+        "--matrices is not implemented",
+        "--symcurve-win and --symcurve-step only apply",
+        "--min-linker-size only applies",
+    ] {
+        assert!(stderr.contains(needle), "missing {needle:?} in: {stderr}");
+    }
+    std::fs::remove_file(&input).ok();
+    std::fs::remove_file(&out).ok();
+}
+
+#[test]
+fn test_gff_output_requires_a_call_stage() {
+    let input = write_fasta("gffstage");
+    let out = tmp_path("gffstage-out.gff");
+    let output = Command::new(EXE)
+        .args([input.to_str().unwrap(), out.to_str().unwrap()])
+        .output()
+        .expect("failed to run");
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("GFF output is only produced by --stage calls"),
+        "{stderr}"
+    );
+    assert!(
+        !out.exists(),
+        "nothing should be written on a refused format"
+    );
+    std::fs::remove_file(&input).ok();
+}
+
+#[test]
+fn test_index_is_used_when_present() {
+    let input = write_fasta("indexed");
+    let run = |out: &std::path::Path| {
+        let output = Command::new(EXE)
+            .args([input.to_str().unwrap(), out.to_str().unwrap(), "--verbose"])
+            .output()
+            .expect("failed to run");
+        assert!(output.status.success(), "{:?}", output);
+        String::from_utf8_lossy(&output.stderr).into_owned()
+    };
+
+    let plain = tmp_path("indexed-plain.bedGraph");
+    let stderr = run(&plain);
+    assert!(stderr.contains(".fai found"), "{stderr}");
+
+    let fai = write_index(&input);
+    let indexed = tmp_path("indexed-indexed.bedGraph");
+    let stderr = run(&indexed);
+    assert!(
+        stderr.contains("using") && stderr.contains(".fai"),
+        "{stderr}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&plain).unwrap(),
+        std::fs::read_to_string(&indexed).unwrap(),
+        "indexed and whole-record reads must agree"
+    );
+
+    // bigWig takes its chromosome sizes from the index instead of a pre-pass.
+    let bw = tmp_path("indexed-out.bw");
+    let stderr = run(&bw);
+    assert!(stderr.contains("as bigWig"), "{stderr}");
+
+    for p in [&input, &fai, &plain, &indexed, &bw] {
+        std::fs::remove_file(p).ok();
+    }
+}
+
+#[test]
+fn test_active_roll_calls_are_labelled_stat_nucleosome() {
+    let input = write_fasta("activecalls");
+    let out = tmp_path("activecalls-out.gff");
+    let output = Command::new(EXE)
+        .args([
+            input.to_str().unwrap(),
+            out.to_str().unwrap(),
+            "--stage",
+            "calls",
+            "--roll",
+            "active",
+            "--symcurve-win",
+            "20",
+            "--verbose",
+        ])
+        .output()
+        .expect("failed to run");
+    assert!(output.status.success(), "{:?}", output);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("calls; largest record"), "{stderr}");
+
+    let text = std::fs::read_to_string(&out).unwrap();
+    assert!(!text.is_empty(), "no calls made");
+    for line in text.lines() {
+        let feature = line.split('\t').nth(2).unwrap();
+        assert_eq!(feature, "stat_nucleosome", "{line}");
+    }
+    std::fs::remove_file(&input).ok();
+    std::fs::remove_file(&out).ok();
+}
