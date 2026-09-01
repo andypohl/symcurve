@@ -6,31 +6,59 @@
 //! convenient traversal and manipulation of the DNA data for the purpose of curvature calculation.
 use crate::curve::matrix;
 use std::collections::VecDeque;
-use std::f64::consts::PI;
-use std::iter::Iterator;
+use std::f64::consts::{PI, TAU};
+use std::iter::{FusedIterator, Iterator};
 
-/// Represents the data for a triplet of nucleotides.
+/// The step a triplet contributes to the traced path.
 ///
-/// This struct contains the twist, roll, and tilt values for a triplet of nucleotides, as well as
-/// the deltas `dx` and `dy` and the roll type. *`roll_type` may be removed from this struct in the
-/// future to accommodate more-general matrix options.*
+/// The roll displaces along the accumulated twist and the tilt along the perpendicular:
+///
+/// ```text
+/// dx = roll * sin(T) + tilt * sin(T - pi/2)
+/// dy = roll * cos(T) + tilt * cos(T - pi/2)
+/// ```
+///
+/// The tilt term is `T - pi/2`, matching both the reference implementation and the
+/// published equations. `T + pi/2` is the opposite perpendicular, which is the same as
+/// negating the tilt, so the sign here is not free to choose. It has no effect while the
+/// supplied tilt matrix is uniformly zero, which is why it is pinned by a test on this
+/// function rather than by one on the iterator.
+fn step(roll: f64, tilt: f64, twist_sum: f64) -> TripletData {
+    let perpendicular = twist_sum - PI / 2.0;
+    TripletData {
+        dx: (roll * twist_sum.sin()) + (tilt * perpendicular.sin()),
+        dy: (roll * twist_sum.cos()) + (tilt * perpendicular.cos()),
+    }
+}
+
+/// How many items a sliding window will still yield.
+///
+/// A window of `window` items over `remaining` inputs yields `remaining - window + 1`, and
+/// `buffered` items are already held. Reported so that collecting into a `Vec` can
+/// allocate once rather than growing repeatedly, which matters at genome scale.
+fn window_size_hint(
+    inner: (usize, Option<usize>),
+    buffered: usize,
+    window: usize,
+) -> (usize, Option<usize>) {
+    let available = |n: usize| (n + buffered + 1).saturating_sub(window);
+    (available(inner.0), inner.1.map(available))
+}
+
+/// The step a triplet of nucleotides contributes to the traced path.
+///
+/// The twist, roll and tilt looked up for the triplet are combined into this step as it is
+/// produced; only the step itself is carried forward, since nothing downstream reads the
+/// individual parameters.
 ///
 /// # Fields
 ///
-/// * `twist`: The twist value for the triplet.
-/// * `roll`: The roll value for the triplet.
-/// * `tilt`: The tilt value for the triplet.
-/// * `dx`: The delta x value, calculated based on the roll and tilt.
-/// * `dy`: The delta y value, calculated based on the roll and tilt.
-/// * `roll_type`: The type of roll (either simple or activated).
-#[derive(Clone, Debug)]
+/// * `dx`: The delta x value, calculated from the roll, tilt and accumulated twist.
+/// * `dy`: The delta y value, calculated from the roll, tilt and accumulated twist.
+#[derive(Clone, Copy, Debug)]
 struct TripletData {
-    twist: f64,
-    roll: f64,
-    tilt: f64,
     dx: f64,
     dy: f64,
-    roll_type: matrix::RollType,
 }
 
 /// An iterator-wrapping struct that yields TripletData from an inner `u8` iterator.
@@ -50,11 +78,15 @@ struct TripletData {
 /// * `inner`: The inner iterator that yields `u8`.
 /// * `twist_sum`: The sum of the twist values for the current triplet.
 /// * `roll_type`: The current roll type.
-struct TripletWindowsIter<I: Iterator> {
+struct TripletWindowsIter<I> {
     base_buffer: VecDeque<u8>,
     inner: I,
     twist_sum: f64,
     roll_type: matrix::RollType,
+    /// Set once the inner iterator has returned None, so it is not polled again.
+    /// Iterator only guarantees anything about repeated calls after exhaustion for
+    /// iterators that are Fused, and the inner one need not be.
+    inner_done: bool,
 }
 
 /// Implementation of the `Iterator` trait for `TripletWindowsIter` struct.
@@ -78,43 +110,55 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         // Fill the buffer with the next three items from the inner iterator.
-        while self.base_buffer.len() < matrix::TRIPLET_SIZE {
-            if let Some(item) = self.inner.next() {
-                self.base_buffer.push_back(item);
-            } else {
-                break;
+        while !self.inner_done && self.base_buffer.len() < matrix::TRIPLET_SIZE {
+            match self.inner.next() {
+                Some(item) => self.base_buffer.push_back(item),
+                None => self.inner_done = true,
             }
         }
         // When the buffer is full, calculate the twist, roll, and tilt values.
         if self.base_buffer.len() >= matrix::TRIPLET_SIZE {
-            let triplet: Vec<u8> = self.base_buffer.iter().cloned().take(3).collect();
-            let twist = matrix::matrix_lookup(&triplet, &matrix::TWIST).unwrap();
+            // Fixed-size, so no allocation: this runs once per base.
+            let triplet: [u8; matrix::TRIPLET_SIZE] = [
+                self.base_buffer[0],
+                self.base_buffer[1],
+                self.base_buffer[2],
+            ];
+            // Decode the ASCII bases once, then index each matrix with the result.
+            let ixs = matrix::triplet_indices(&triplet).unwrap();
+            let twist = matrix::lookup_by_index(&ixs, &matrix::TWIST);
             let roll = match self.roll_type {
-                matrix::RollType::Simple => {
-                    matrix::matrix_lookup(&triplet, &matrix::ROLL_SIMPLE).unwrap()
-                }
-                matrix::RollType::Active => {
-                    matrix::matrix_lookup(&triplet, &matrix::ROLL_ACTIVE).unwrap()
-                }
+                matrix::RollType::Simple => matrix::lookup_by_index(&ixs, &matrix::ROLL_SIMPLE),
+                matrix::RollType::Active => matrix::lookup_by_index(&ixs, &matrix::ROLL_ACTIVE),
             };
-            let tilt = matrix::matrix_lookup(&triplet, &matrix::TILT).unwrap();
+            let tilt = matrix::lookup_by_index(&ixs, &matrix::TILT);
             self.twist_sum += twist;
+            // Only sin and cos of this are ever used, so keeping it in [0, TAU) changes
+            // nothing mathematically while stopping it from growing without bound. Left
+            // to accumulate it reaches ~1.5e8 radians over a chromosome, where an ulp is
+            // 3e-8 radians and the per-step rounding has compounded far past that.
+            if !(0.0..TAU).contains(&self.twist_sum) {
+                self.twist_sum = self.twist_sum.rem_euclid(TAU);
+            }
             // Create a TripletData instance and return it.
-            let window = TripletData {
-                twist,
-                roll,
-                tilt,
-                dx: (roll * self.twist_sum.sin()) + (tilt * (self.twist_sum + PI / 2.0).sin()),
-                dy: (roll * self.twist_sum.cos()) + (tilt * (self.twist_sum + PI / 2.0).cos()),
-                roll_type: self.roll_type.clone(),
-            };
+            let window = step(roll, tilt, self.twist_sum);
             self.base_buffer.pop_front();
             Some(window)
         } else {
             None
         }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        window_size_hint(
+            self.inner.size_hint(),
+            self.base_buffer.len(),
+            matrix::TRIPLET_SIZE,
+        )
+    }
 }
+
+impl<I> FusedIterator for TripletWindowsIter<I> where I: Iterator<Item = u8> {}
 
 /// A trait for `u8` Iterators to yield `TripletData`.
 ///
@@ -138,34 +182,29 @@ trait TripletWindowsIterator: Iterator<Item = u8> + Sized {
             inner: self,
             twist_sum: 0.0,
             roll_type,
+            inner_done: false,
         }
     }
 }
 
 impl<I: Iterator<Item = u8>> TripletWindowsIterator for I {}
 
-/// Represents the coordinates and associated data for a triplet of nucleotides.
-///
-/// `CoordsData` contains the x and y coordinates calculated from the `TripletData`, as well as
-/// the `TripletData` itself. The `TripletData` is optional, but is only None at the very end
-/// of the associated iterator.
+/// A point on the path traced by the accumulated steps.
 ///
 /// # Fields
 ///
-/// * `triplet_data`: The `TripletData` associated with these coordinates. This is `None` if there
-///   is no associated data.
 /// * `x`: The x coordinate.
 /// * `y`: The y coordinate.
+#[derive(Clone, Copy, Debug)]
 struct CoordsData {
-    triplet_data: Option<TripletData>,
     x: f64,
     y: f64,
 }
 
 impl CoordsData {
     /// Constructor for `CoordsData`.
-    fn new(triplet_data: Option<TripletData>, x: f64, y: f64) -> Self {
-        CoordsData { triplet_data, x, y }
+    fn new(x: f64, y: f64) -> Self {
+        CoordsData { x, y }
     }
 }
 
@@ -199,84 +238,62 @@ struct CoordsIter<I: Iterator> {
     prev_dy: f64,
 }
 
-impl<I: Iterator<Item = TripletData>> CoordsIter<I> {
-    /// Constructor for `CoordsIter`.
-    fn new(inner: I) -> Self {
-        CoordsIter {
-            inner,
-            head: false,
-            tail: false,
-            prev_x_coord: 0.0,
-            prev_y_coord: 0.0,
-            prev_dx: 0.0,
-            prev_dy: 0.0,
-        }
-    }
-}
-
 impl<I> Iterator for CoordsIter<I>
 where
     I: Iterator<Item = TripletData>,
 {
     type Item = CoordsData;
 
-    /// Implementation of `Iterator` trait for `CoordsIter` struct.
+    /// Advance the traced path by one step.
     ///
-    /// This method first tries to get the next `TripletData` from the inner iterator. If there is a next item,
-    /// it updates the previous deltas with the deltas from the current item and creates a new `CoordsData` with
-    /// the current `TripletData`.
-    ///
-    /// If there are no more items in the inner iterator it yields one more new `CoordsData` without a
-    /// `TripletData` but with `x` and `y` filled in.
-    ///
-    /// # Returns
-    ///
-    /// A `Some(CoordsData)` with the next coordinates and `TripletData`, or `None` if there are no more items.
+    /// The first point the path would yield is the origin before any step has been
+    /// applied, which carries no information, so it is skipped. Once the inner iterator
+    /// runs out one final point is emitted, applying the last step.
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(triplet_data) = self.inner.next() {
-            let result = Some(self.create_coords_data(Some(triplet_data.to_owned())));
-            self.prev_dx = triplet_data.dx;
-            self.prev_dy = triplet_data.dy;
-            if !self.head {
-                self.head = true;
-                return self.next();
+        loop {
+            match self.inner.next() {
+                Some(triplet_data) => {
+                    let point = self.step();
+                    self.prev_dx = triplet_data.dx;
+                    self.prev_dy = triplet_data.dy;
+                    if self.head {
+                        return Some(point);
+                    }
+                    // Discard the origin and go round again rather than recursing.
+                    self.head = true;
+                }
+                None if !self.tail => {
+                    self.tail = true;
+                    return Some(self.step());
+                }
+                None => return None,
             }
-            result
-        } else if !self.tail {
-            self.tail = true;
-            Some(self.create_coords_data(None))
-        } else {
-            None
         }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        // One point is dropped from the front and one added at the end, so the count
+        // matches the inner iterator's, give or take what has already been consumed.
+        let (lower, upper) = self.inner.size_hint();
+        let pending = usize::from(!self.tail);
+        (
+            lower.saturating_add(pending).saturating_sub(1),
+            upper.and_then(|u| u.checked_add(pending)),
+        )
+    }
 }
+
+impl<I> FusedIterator for CoordsIter<I> where I: Iterator<Item = TripletData> {}
 
 impl<I> CoordsIter<I>
 where
     I: Iterator<Item = TripletData>,
 {
-    /// Creates a `CoordsData` instance from an optional `TripletData`.
-    ///
-    /// Helper to `CoordsIter::next()` that creates a `CoordsData` instance from the current
-    /// `TripletData` and the previous coordinates.
-    ///
-    /// # Arguments
-    ///
-    /// * `triplet_data` - An optional `TripletData` that will be included in the created `CoordsData`.
-    ///
-    /// # Returns
-    ///
-    /// A `CoordsData` instance with the calculated coordinates and the given `TripletData`.
-    fn create_coords_data(&mut self, triplet_data: Option<TripletData>) -> CoordsData {
-        let x_coord = self.prev_x_coord + self.prev_dx;
-        let y_coord = self.prev_y_coord + self.prev_dy;
-        self.prev_x_coord = x_coord;
-        self.prev_y_coord = y_coord;
-        CoordsData {
-            triplet_data,
-            x: x_coord,
-            y: y_coord,
-        }
+    /// Apply the previous step to the current position and return the point reached.
+    fn step(&mut self) -> CoordsData {
+        self.prev_x_coord += self.prev_dx;
+        self.prev_y_coord += self.prev_dy;
+        CoordsData::new(self.prev_x_coord, self.prev_y_coord)
     }
 }
 
@@ -322,6 +339,14 @@ struct RollMeanData {
     y_bar: f64,
 }
 
+/// How many items may pass before the rolling sums are rebuilt from the buffer.
+///
+/// A running sum that is added to and subtracted from never sheds the rounding of the
+/// values that have left it, so its error ratchets upward. Rebuilding costs one pass over
+/// a window of about a hundred items, so amortised over this interval it is a fraction of
+/// a percent of the work.
+const ROLL_SUM_REBUILD_INTERVAL: usize = 1 << 16;
+
 /// Represents the data for a rolling mean of the x and y coordinates.
 ///
 /// The `RollMeanData` struct contains the weighted x and y means for a window of coordinates
@@ -335,12 +360,16 @@ struct RollMeanData {
 ///   2 * `step_size` + 1 is the size of the window.
 /// * `x_roll_sum`: The sum of the x coordinates in the current window.
 /// * `y_roll_sum`: The sum of the y coordinates in the current window.
-struct RollMeanIter<I: Iterator> {
+/// * `since_rebuild`: Items processed since the rolling sums were last rebuilt.
+struct RollMeanIter<I> {
     inner: I,
     buffer: VecDeque<CoordsData>,
     step_size: usize,
     x_roll_sum: f64,
     y_roll_sum: f64,
+    since_rebuild: usize,
+    /// Set once the inner iterator has returned None, so it is not polled again.
+    inner_done: bool,
 }
 
 /// Implementation of the `Iterator` trait for `RollMeanIter`.
@@ -363,16 +392,23 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         // Fill the buffer with the next three items from the inner iterator.
         let window_size = self.step_size * 2 + 1;
-        while self.buffer.len() < window_size {
-            if let Some(item) = self.inner.next() {
-                self.x_roll_sum += item.x;
-                self.y_roll_sum += item.y;
-                self.buffer.push_back(item);
-            } else {
-                break;
+        while !self.inner_done && self.buffer.len() < window_size {
+            match self.inner.next() {
+                Some(item) => {
+                    self.x_roll_sum += item.x;
+                    self.y_roll_sum += item.y;
+                    self.buffer.push_back(item);
+                }
+                None => self.inner_done = true,
             }
         }
         if self.buffer.len() >= window_size {
+            self.since_rebuild += 1;
+            if self.since_rebuild >= ROLL_SUM_REBUILD_INTERVAL {
+                self.x_roll_sum = self.buffer.iter().map(|item| item.x).sum();
+                self.y_roll_sum = self.buffer.iter().map(|item| item.y).sum();
+                self.since_rebuild = 0;
+            }
             // get the fron/back items without removing them and adjust the roll sum
             let adj_x_roll_sum = self.x_roll_sum
                 - (0.5 * self.buffer.front().unwrap().x)
@@ -380,8 +416,8 @@ where
             let adj_y_roll_sum = self.y_roll_sum
                 - (0.5 * self.buffer.front().unwrap().y)
                 - (0.5 * self.buffer.back().unwrap().y);
-            let x_bar = adj_x_roll_sum / (window_size as f64 - 1 as f64);
-            let y_bar = adj_y_roll_sum / (window_size as f64 - 1 as f64);
+            let x_bar = adj_x_roll_sum / (window_size as f64 - 1_f64);
+            let y_bar = adj_y_roll_sum / (window_size as f64 - 1_f64);
             let result = Some(RollMeanData { x_bar, y_bar });
             let item = self.buffer.pop_front().unwrap();
             self.x_roll_sum -= item.x;
@@ -391,7 +427,17 @@ where
             None
         }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        window_size_hint(
+            self.inner.size_hint(),
+            self.buffer.len(),
+            self.step_size * 2 + 1,
+        )
+    }
 }
+
+impl<I> FusedIterator for RollMeanIter<I> where I: Iterator<Item = CoordsData> {}
 
 /// A trait for iterators that can compute a rolling mean of `CoordsData`.
 ///
@@ -407,7 +453,7 @@ trait RollMeanIterator: Iterator<Item = CoordsData> + Sized {
     /// # Parameters
     ///
     /// * `step_size`: half of the window size minus one. In other words, 2 * `step_size` + 1 is
-    ///  the size of the window.
+    ///   the size of the window.
     ///
     /// # Returns
     ///
@@ -419,6 +465,8 @@ trait RollMeanIterator: Iterator<Item = CoordsData> + Sized {
             step_size,
             x_roll_sum: 0.0,
             y_roll_sum: 0.0,
+            since_rebuild: 0,
+            inner_done: false,
         }
     }
 }
@@ -437,10 +485,12 @@ impl<I: Iterator<Item = CoordsData>> RollMeanIterator for I {}
 /// * `buffer`: A buffer that stores 2 * `curve_step_size` + 1 items from the inner iterator.
 ///
 /// * `curve_step_size`: The distance from the midpoint base in the window.  
-struct EucDistIter<I: Iterator> {
+struct EucDistIter<I> {
     inner: I,
     buffer: VecDeque<RollMeanData>,
     curve_step_size: usize,
+    /// Set once the inner iterator has returned None, so it is not polled again.
+    inner_done: bool,
 }
 
 impl<I> Iterator for EucDistIter<I>
@@ -460,26 +510,34 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         // Fill the buffer with the next three items from the inner iterator.
         let window_size = self.curve_step_size * 2 + 1;
-        while self.buffer.len() < window_size {
-            if let Some(item) = self.inner.next() {
-                self.buffer.push_back(item);
-            } else {
-                break;
+        while !self.inner_done && self.buffer.len() < window_size {
+            match self.inner.next() {
+                Some(item) => self.buffer.push_back(item),
+                None => self.inner_done = true,
             }
         }
         if self.buffer.len() >= window_size {
             let left = self.buffer.front().unwrap();
             let right = self.buffer.back().unwrap();
-            let curve = ((right.y_bar - left.y_bar).powf(2.0)
-                + (right.x_bar - left.x_bar).powf(2.0))
-            .sqrt();
+            let curve =
+                ((right.y_bar - left.y_bar).powi(2) + (right.x_bar - left.x_bar).powi(2)).sqrt();
             self.buffer.pop_front();
             Some(curve)
         } else {
             None
         }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        window_size_hint(
+            self.inner.size_hint(),
+            self.buffer.len(),
+            self.curve_step_size * 2 + 1,
+        )
+    }
 }
+
+impl<I> FusedIterator for EucDistIter<I> where I: Iterator<Item = RollMeanData> {}
 
 trait EucDistIterator: Iterator<Item = RollMeanData> + Sized {
     fn euc_dist_iter(self, curve_step_size: usize) -> EucDistIter<Self> {
@@ -487,11 +545,155 @@ trait EucDistIterator: Iterator<Item = RollMeanData> + Sized {
             inner: self,
             buffer: VecDeque::new(),
             curve_step_size,
+            inner_done: false,
         }
     }
 }
 
 impl<I: Iterator<Item = RollMeanData>> EucDistIterator for I {}
+
+/// The value assigned when a dyad's symmetry component comes out exactly zero.
+///
+/// A zero sum means every mirrored pair around the dyad was exactly equal, so the
+/// reciprocal is undefined. The reference implementation substitutes 100 and carries on,
+/// and callers downstream treat that as a saturated score rather than a real one.
+pub const DEGENERATE_SYMMETRY: f64 = 100.0;
+
+/// An iterator that computes symmetry of curvature around each candidate dyad.
+///
+/// This is the last stage: it consumes curvature values and yields one symmetry score per
+/// dyad. A score is non-zero only where the curvature has a strict local minimum, which is
+/// what a nucleosome dyad is expected to look like, and rises the more symmetric the
+/// curvature is on either side of it.
+///
+/// # Fields
+///
+/// * `inner`: The inner iterator that yields curvature values.
+/// * `buffer`: A buffer holding 2 * `win` + 1 curvature values, the dyad at its centre.
+/// * `win`: The margin kept on each side of the dyad.
+/// * `step`: The stride, both between dyads and between the mirrored pairs summed at each.
+/// * `inner_done`: Set once the inner iterator has returned None, so it is not polled again.
+pub struct SymCurveIter<I> {
+    inner: I,
+    buffer: VecDeque<f64>,
+    win: usize,
+    step: usize,
+    inner_done: bool,
+}
+
+impl<I> Iterator for SymCurveIter<I>
+where
+    I: Iterator<Item = f64>,
+{
+    type Item = f64;
+
+    /// Computes the symmetry score for the next dyad.
+    ///
+    /// Following the reference implementation, for a dyad \(d\):
+    ///
+    /// ```text
+    /// sum    = SUM over m of |curv[d + m] - curv[d - m]|,  m = 0, step, 2*step, ... <= win/2
+    /// slope  = (curv[d-1] - curv[d]) + (curv[d+1] - curv[d])
+    /// weight = 1/slope   if curv[d] is a strict local minimum and slope >= 0.01
+    ///          0         otherwise
+    /// score  = weight / sum
+    /// ```
+    ///
+    /// The mirrored sum runs out to `win / 2`, but a dyad is only considered once `win`
+    /// values are available on each side. That wider margin is the reference's, and it
+    /// means the first and last `win` curvature values yield no score even though only
+    /// `win / 2` are read. Reproduced here so the output positions match.
+    fn next(&mut self) -> Option<Self::Item> {
+        let span = 2 * self.win + 1;
+        while !self.inner_done && self.buffer.len() < span {
+            match self.inner.next() {
+                Some(value) => self.buffer.push_back(value),
+                None => self.inner_done = true,
+            }
+        }
+        if self.buffer.len() < span {
+            return None;
+        }
+
+        let dyad = self.win;
+        let half = self.win / 2;
+        let mut sum = 0.0;
+        let mut offset = 0;
+        while offset <= half {
+            sum += (self.buffer[dyad + offset] - self.buffer[dyad - offset]).abs();
+            offset += self.step;
+        }
+
+        let current = self.buffer[dyad];
+        let before = self.buffer[dyad - 1];
+        let after = self.buffer[dyad + 1];
+        let slope = (before - current) + (after - current);
+        let weight = if current < before && current < after && slope >= 0.01 {
+            1.0 / slope
+        } else {
+            0.0
+        };
+
+        // Compared against zero exactly, as the reference does: the substitution is for a
+        // sum that is precisely zero, not one that is merely small.
+        let score = if sum != 0.0 {
+            weight / sum
+        } else {
+            DEGENERATE_SYMMETRY
+        };
+
+        // Advance by `step`: drop what the buffer holds and skip the rest at the source,
+        // so a stride longer than the span still lands on the reference's next dyad.
+        let held = self.buffer.len().min(self.step);
+        self.buffer.drain(..held);
+        for _ in held..self.step {
+            if self.inner.next().is_none() {
+                self.inner_done = true;
+                break;
+            }
+        }
+        Some(score)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let (lower, upper) =
+            window_size_hint(self.inner.size_hint(), self.buffer.len(), span_of(self.win));
+        let strided = |n: usize| n.div_ceil(self.step);
+        (strided(lower), upper.map(strided))
+    }
+}
+
+impl<I> FusedIterator for SymCurveIter<I> where I: Iterator<Item = f64> {}
+
+/// The number of curvature values a dyad needs in view: `win` on each side, plus itself.
+fn span_of(win: usize) -> usize {
+    2 * win + 1
+}
+
+/// A trait for curvature iterators to yield symmetry scores.
+///
+/// This is **layer 5** of the iterator stack, sitting on the curvature values that
+/// [`CurveIter`] produces.
+pub trait SymCurveIterator: Iterator<Item = f64> + Sized {
+    /// Wraps the iterator in a [`SymCurveIter`].
+    ///
+    /// # Parameters
+    ///
+    /// * `win`: The margin kept on each side of a dyad. The reference uses 101.
+    /// * `step`: The stride between dyads and between mirrored pairs. Values below 1 are
+    ///   treated as 1, since a stride of zero would never advance.
+    fn sym_curve_iter(self, win: usize, step: usize) -> SymCurveIter<Self> {
+        SymCurveIter {
+            inner: self,
+            buffer: VecDeque::new(),
+            win,
+            step: step.max(1),
+            inner_done: false,
+        }
+    }
+}
+
+impl<I: Iterator<Item = f64>> SymCurveIterator for I {}
 
 /// An iterator that computes the curvature of a DNA sequence.
 ///
@@ -513,7 +715,14 @@ impl<I: Iterator<Item = u8>> Iterator for CurveIter<I> {
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next().map(|x| x * self.curve_scale)
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        // Scaling is one-to-one, so the stack below reports the count unchanged.
+        self.inner.size_hint()
+    }
 }
+
+impl<I: Iterator<Item = u8>> FusedIterator for CurveIter<I> {}
 
 /// Construct a `CurveIter` from an iterator that yields `u8`.
 ///
@@ -525,10 +734,28 @@ impl<I: Iterator<Item = u8>> Iterator for CurveIter<I> {
 /// * `seq_iter`: An iterator that yields `u8`.
 /// * `roll_type`: The type of roll (either simple or activated).
 /// * `step_b`: Half of the window size minus one. In other words, 2 * `step_size` + 1 is
-///  the size of the window.
+///   the size of the window.
 /// * `step_c`: The distance from the midpoint base to the sides in the curve window.
 impl<I: Iterator<Item = u8>> CurveIter<I> {
-    fn new(
+    /// Build a curvature iterator over a stream of bases.
+    ///
+    /// Bases must be A, C, G or T in either case; anything else will panic, so split a
+    /// record with [`crate::fasta::split_seq_by_gaps`] first. For scoring whole records
+    /// use [`crate::curve::scan`], which handles splitting, positions and threading.
+    ///
+    /// The first `step_b + step_c + 1` bases and the last of the same produce no value,
+    /// because the windows need context on both sides.
+    ///
+    /// ```
+    /// use symcurve::curve::iters::CurveIter;
+    /// use symcurve::curve::matrix::RollType;
+    ///
+    /// let seq = b"CCAACATTTTGACTTTTTGGGAGGGCACTAGCACCTATCTACCCTGAATC";
+    /// let curves: Vec<f64> =
+    ///     CurveIter::new(seq.iter().copied(), RollType::Simple, 5, 15, 0.33335).collect();
+    /// assert_eq!(curves.len(), seq.len() - 2 * (5 + 15 + 1));
+    /// ```
+    pub fn new(
         seq_iter: I,
         roll_type: matrix::RollType,
         step_b: usize,
@@ -725,8 +952,8 @@ mod tests {
 
         x_values
             .into_iter()
-            .zip(y_values.into_iter())
-            .map(|(x, y)| CoordsData::new(None, x, y))
+            .zip(y_values)
+            .map(|(x, y)| CoordsData::new(x, y))
             .collect()
     }
 
@@ -834,7 +1061,7 @@ mod tests {
 
         x_values
             .into_iter()
-            .zip(y_values.into_iter())
+            .zip(y_values)
             .map(|(x_bar, y_bar)| RollMeanData { x_bar, y_bar })
             .collect()
     }
@@ -963,5 +1190,553 @@ mod tests {
         assert_relative_eq!(curves[5], 3.7726, epsilon = 1e-4);
         assert_relative_eq!(curves[6], 3.3483, epsilon = 1e-4);
         assert_relative_eq!(curves[7], 3.1042, epsilon = 1e-4);
+    }
+
+    /// A direct transcription of the reference implementation's SYMCURV subroutine,
+    /// kept deliberately unidiomatic so it reads against the Perl line by line and can
+    /// serve as an oracle for the iterator.
+    ///
+    /// ```perl
+    /// for (my $dyad = $win ; $dyad < scalar(@Curv) - $win ; $dyad += $step) {
+    ///     my $weight = 0; my $sum = 0;
+    ///     for (my $j = $dyad, my $k = $dyad ;
+    ///          $j < $dyad + int($win/2) + 1, $k > $dyad - int($win/2) - 1 ;
+    ///          $j += $step, $k -= $step) {
+    ///         $sum += abs($Curv[$j] - $Curv[$k]);
+    ///     }
+    ///     if (($Curv[$dyad] < $Curv[$dyad-1]) and ($Curv[$dyad] < $Curv[$dyad+1])
+    ///         and ((($Curv[$dyad-1]-$Curv[$dyad]) + ($Curv[$dyad+1]-$Curv[$dyad])) >= 0.01)) {
+    ///         $weight = 1/(($Curv[$dyad-1]-$Curv[$dyad]) + ($Curv[$dyad+1]-$Curv[$dyad]))
+    ///     } else { $weight = 0; }
+    ///     if ($sum != 0) { $symcurv[$dyad] = (1/$sum) * $weight; }
+    ///     else           { $symcurv[$dyad] = 100; }
+    /// }
+    /// ```
+    ///
+    /// Note the inner loop's comma operator: Perl evaluates only the last condition, so
+    /// the `$j` bound is dead and `$k` alone terminates the loop. Transcribed as written.
+    fn perl_symcurv(curv: &[f64], win: usize, step: usize) -> Vec<(usize, f64)> {
+        let mut out = Vec::new();
+        if curv.len() < 2 * win + 1 {
+            return out;
+        }
+        let half = win / 2;
+        let mut dyad = win;
+        while dyad < curv.len() - win {
+            let mut sum = 0.0;
+            let (mut j, mut k) = (dyad, dyad);
+            // `$k > $dyad - int($win/2) - 1`
+            while k + half + 1 > dyad {
+                sum += (curv[j] - curv[k]).abs();
+                j += step;
+                if k < step {
+                    break;
+                }
+                k -= step;
+            }
+            let weight = if curv[dyad] < curv[dyad - 1]
+                && curv[dyad] < curv[dyad + 1]
+                && ((curv[dyad - 1] - curv[dyad]) + (curv[dyad + 1] - curv[dyad])) >= 0.01
+            {
+                1.0 / ((curv[dyad - 1] - curv[dyad]) + (curv[dyad + 1] - curv[dyad]))
+            } else {
+                0.0
+            };
+            let value = if sum != 0.0 {
+                (1.0 / sum) * weight
+            } else {
+                100.0
+            };
+            out.push((dyad, value));
+            dyad += step;
+        }
+        out
+    }
+
+    fn synthetic_curvature(n: usize, seed: u64) -> Vec<f64> {
+        // Smooth-ish with genuine local minima, so the minimum test is actually exercised.
+        let mut x = seed;
+        (0..n)
+            .map(|i| {
+                x ^= x << 13;
+                x ^= x >> 7;
+                x ^= x << 17;
+                let noise = (x >> 11) as f64 / (1u64 << 53) as f64;
+                2.0 + (i as f64 / 7.0).sin() + 0.5 * (i as f64 / 3.0).cos() + 0.05 * noise
+            })
+            .collect()
+    }
+
+    #[test]
+    fn test_sym_curve_matches_the_reference_transcription() {
+        for (n, win, step) in [
+            (600usize, 101usize, 1usize),
+            (600, 101, 3),
+            (400, 51, 1),
+            (300, 20, 1),
+            (300, 20, 7),
+            (250, 101, 1), // too short: no dyads at all
+        ] {
+            let curv = synthetic_curvature(n, 0x2545F4914F6CDD1D ^ n as u64);
+            let expected = perl_symcurv(&curv, win, step);
+            let got: Vec<f64> = curv.iter().copied().sym_curve_iter(win, step).collect();
+            assert_eq!(
+                got.len(),
+                expected.len(),
+                "count differs for n={n} win={win} step={step}"
+            );
+            for (i, (&value, &(dyad, want))) in got.iter().zip(&expected).enumerate() {
+                assert_relative_eq!(value, want, epsilon = 1e-12, max_relative = 1e-12);
+                // The first score belongs to curvature index `win`, then every `step`.
+                assert_eq!(dyad, win + i * step);
+            }
+        }
+    }
+
+    #[test]
+    fn test_sym_curve_is_zero_away_from_local_minima() {
+        // A strictly increasing curve has no local minimum, so every dyad scores zero.
+        let curv: Vec<f64> = (0..500).map(|i| i as f64 * 0.01).collect();
+        let got: Vec<f64> = curv.iter().copied().sym_curve_iter(101, 1).collect();
+        assert!(!got.is_empty());
+        assert!(
+            got.iter().all(|&v| v == 0.0),
+            "expected all zero, got {got:?}"
+        );
+    }
+
+    #[test]
+    fn test_sym_curve_saturates_when_perfectly_symmetric() {
+        // Constant curvature makes every mirrored pair equal, so the sum is exactly zero
+        // and the reference substitutes 100.
+        let curv = vec![1.25f64; 500];
+        let got: Vec<f64> = curv.iter().copied().sym_curve_iter(101, 1).collect();
+        assert!(!got.is_empty());
+        assert!(
+            got.iter().all(|&v| v == DEGENERATE_SYMMETRY),
+            "expected the saturated value"
+        );
+    }
+
+    #[test]
+    fn test_sym_curve_scores_a_symmetric_minimum() {
+        // A V shape centred in the window: a genuine local minimum with perfectly
+        // symmetric sides, so weight is positive and the score is finite and positive.
+        let win = 20usize;
+        let n = 2 * win + 1;
+        let centre = win as f64;
+        let curv: Vec<f64> = (0..n)
+            .map(|i| 1.0 + (i as f64 - centre).abs() * 0.1)
+            .collect();
+        let got: Vec<f64> = curv.iter().copied().sym_curve_iter(win, 1).collect();
+        assert_eq!(got.len(), 1);
+        // Mirrored pairs are equal by construction, so the sum is zero and it saturates.
+        assert_eq!(got[0], DEGENERATE_SYMMETRY);
+
+        // Break the symmetry slightly: now the sum is non-zero and the score is finite.
+        let mut skewed = curv.clone();
+        skewed[win + 3] += 0.4;
+        let got: Vec<f64> = skewed.iter().copied().sym_curve_iter(win, 1).collect();
+        assert_eq!(got.len(), 1);
+        assert!(got[0] > 0.0 && got[0].is_finite(), "got {}", got[0]);
+        assert!(got[0] < DEGENERATE_SYMMETRY);
+    }
+
+    #[test]
+    fn test_sym_curve_needs_win_on_both_sides() {
+        for len in [0usize, 1, 100, 202, 203, 204] {
+            let curv = synthetic_curvature(len, 7);
+            let got: Vec<f64> = curv.iter().copied().sym_curve_iter(101, 1).collect();
+            let expected = len.saturating_sub(2 * 101);
+            assert_eq!(got.len(), expected, "len {len}");
+        }
+    }
+
+    #[test]
+    fn test_sym_curve_stacks_onto_the_curve_iterator() {
+        // The whole pipeline, bases through to symmetry.
+        let unit = b"CCAACATTTTGACTTTTTGGGAGGGCACTAGCACCTATCTACCCTGAATC";
+        let mut seq = Vec::new();
+        for _ in 0..20 {
+            seq.extend_from_slice(unit);
+        }
+        let (step_b, step_c, win) = (5usize, 15usize, 101usize);
+        let curves: Vec<f64> = CurveIter::new(
+            seq.iter().copied(),
+            matrix::RollType::Simple,
+            step_b,
+            step_c,
+            0.33335,
+        )
+        .collect();
+        let direct: Vec<f64> = curves.iter().copied().sym_curve_iter(win, 1).collect();
+        let stacked: Vec<f64> = CurveIter::new(
+            seq.iter().copied(),
+            matrix::RollType::Simple,
+            step_b,
+            step_c,
+            0.33335,
+        )
+        .sym_curve_iter(win, 1)
+        .collect();
+        assert_eq!(direct.len(), curves.len() - 2 * win);
+        assert_eq!(direct, stacked);
+        assert!(direct.iter().any(|&v| v > 0.0), "no dyad scored at all");
+    }
+
+    #[test]
+    fn test_step_places_tilt_on_the_reference_side() {
+        // The supplied tilt matrix is uniformly zero, so no test driving the iterator can
+        // tell T - pi/2 from T + pi/2. Exercise the formula directly with a non-zero tilt.
+        //
+        // Expected values come from the reference implementation's expression,
+        //   dx = roll*sin(T) + tilt*sin(T - pi/2)
+        //   dy = roll*cos(T) + tilt*cos(T - pi/2)
+        // written out here as its trigonometric identity so the test does not simply
+        // restate the code: sin(T - pi/2) = -cos(T) and cos(T - pi/2) = sin(T).
+        for &(roll, tilt, twist) in &[
+            (5.0, 2.0, 0.0),
+            (0.7, 1.5, 0.598647428),
+            (3.05865, -0.25, 1.7),
+            (0.0, 1.0, 3.0),
+            (6.2, 0.0, 2.5),
+        ] {
+            let got = step(roll, tilt, twist);
+            let expected_dx = roll * twist.sin() - tilt * twist.cos();
+            let expected_dy = roll * twist.cos() + tilt * twist.sin();
+            assert_relative_eq!(got.dx, expected_dx, epsilon = 1e-12);
+            assert_relative_eq!(got.dy, expected_dy, epsilon = 1e-12);
+        }
+    }
+
+    #[test]
+    fn test_step_tilt_sign_is_not_the_opposite_perpendicular() {
+        // T + pi/2 is the exact negation of T - pi/2, so a sign slip is invisible unless
+        // something checks it. With a non-zero tilt the two differ by twice the tilt term.
+        let (roll, tilt, twist) = (2.0, 1.0, 0.9);
+        let got = step(roll, tilt, twist);
+        let wrong_dx = roll * twist.sin() + tilt * (twist + PI / 2.0).sin();
+        assert!(
+            (got.dx - wrong_dx).abs() > 1.0,
+            "dx {} matches the opposite perpendicular {}",
+            got.dx,
+            wrong_dx
+        );
+        // Tilt contributes nothing when it is zero, whichever convention is used.
+        assert_relative_eq!(
+            step(roll, 0.0, twist).dx,
+            roll * twist.sin(),
+            epsilon = 1e-12
+        );
+    }
+
+    #[test]
+    fn test_step_matches_the_pipeline() {
+        // The iterator must actually be using this function.
+        let seq = b"CCAACATTTT";
+        let twist = matrix::matrix_lookup(b"CCA", &matrix::TWIST).unwrap();
+        let roll = matrix::matrix_lookup(b"CCA", &matrix::ROLL_SIMPLE).unwrap();
+        let tilt = matrix::matrix_lookup(b"CCA", &matrix::TILT).unwrap();
+        let first = seq
+            .iter()
+            .copied()
+            .triplet_windows_iter(matrix::RollType::Simple)
+            .next()
+            .unwrap();
+        let expected = step(roll, tilt, twist);
+        assert_relative_eq!(first.dx, expected.dx, epsilon = 1e-12);
+        assert_relative_eq!(first.dy, expected.dy, epsilon = 1e-12);
+    }
+
+    #[test]
+    fn test_roll_type_selects_the_matching_matrix() {
+        // Guards the pairing that the ROLL_SIMPLE / ROLL_ACTIVE doc comments describe.
+        // The two matrices disagree at CCA (0.7 simple, 3.05865 active), so this fails if
+        // the constants are ever swapped to "fix" a mismatch with their docs.
+        //
+        // Checked through dx rather than a stored roll value: after one triplet the
+        // accumulated twist is a single TWIST entry, so dx is roll * sin(twist), which
+        // pins the routing and the step formula together.
+        let cca = b"CCA";
+        let twist = matrix::matrix_lookup(cca, &matrix::TWIST).unwrap();
+        let dx_for = |roll_type: matrix::RollType| -> f64 {
+            cca.iter()
+                .copied()
+                .triplet_windows_iter(roll_type)
+                .next()
+                .unwrap()
+                .dx
+        };
+        assert_relative_eq!(
+            dx_for(matrix::RollType::Simple),
+            0.7 * twist.sin(),
+            epsilon = 1e-12
+        );
+        assert_relative_eq!(
+            dx_for(matrix::RollType::Active),
+            3.05865 * twist.sin(),
+            epsilon = 1e-12
+        );
+        assert_relative_eq!(
+            matrix::matrix_lookup(cca, &matrix::ROLL_SIMPLE).unwrap(),
+            0.7,
+            epsilon = 1e-9
+        );
+        assert_relative_eq!(
+            matrix::matrix_lookup(cca, &matrix::ROLL_ACTIVE).unwrap(),
+            3.05865,
+            epsilon = 1e-9
+        );
+    }
+
+    #[test]
+    fn test_long_runs_agree_with_locally_computed_scores() {
+        // A score depends only on the bases within lead_in of it, so computing one at the
+        // far end of a long sequence must match computing it from a short slice around
+        // that position. Accumulated state is what breaks this: before twist was kept
+        // bounded and the rolling sums rebuilt, the same comparison drifted to 1.6e-10
+        // over this input, so the threshold here fails against that behaviour.
+        let bases = *b"ACGT";
+        let mut x: u64 = 0x5555AAAA33337777;
+        let n = 300_000usize;
+        let (step_b, step_c) = (5usize, 15usize);
+        let lead = step_b + step_c + 1;
+        let seq: Vec<u8> = (0..n)
+            .map(|_| {
+                x ^= x << 13;
+                x ^= x >> 7;
+                x ^= x << 17;
+                bases[(x % 4) as usize]
+            })
+            .collect();
+
+        let score = |s: &[u8]| -> Vec<f64> {
+            CurveIter::new(
+                s.iter().copied(),
+                matrix::RollType::Simple,
+                step_b,
+                step_c,
+                0.33335,
+            )
+            .collect()
+        };
+
+        let long = score(&seq);
+        for &p in &[long.len() - 1, long.len() / 2, long.len() - 1000] {
+            let local = score(&seq[p..p + 2 * lead + 1]);
+            let rel = (long[p] - local[0]).abs() / long[p].abs().max(1e-12);
+            assert!(
+                rel < 1e-11,
+                "score {p} drifted: long {} vs local {} (rel {rel:.3e})",
+                long[p],
+                local[0]
+            );
+        }
+    }
+
+    #[test]
+    fn test_rolling_sums_stay_equal_to_a_fresh_sum() {
+        // Run past the rebuild interval so the rebuild path is exercised, and check the
+        // rolling means still match ones computed directly over each window.
+        let bases = *b"ACGT";
+        let mut x: u64 = 0x0F1E2D3C4B5A6978;
+        let n = ROLL_SUM_REBUILD_INTERVAL + 5_000;
+        let seq: Vec<u8> = (0..n)
+            .map(|_| {
+                x ^= x << 13;
+                x ^= x >> 7;
+                x ^= x << 17;
+                bases[(x % 4) as usize]
+            })
+            .collect();
+
+        let step_size = 5usize;
+        let window = 2 * step_size + 1;
+        let coords: Vec<CoordsData> = seq
+            .iter()
+            .copied()
+            .triplet_windows_iter(matrix::RollType::Simple)
+            .coords_iter()
+            .collect();
+        let means: Vec<RollMeanData> = seq
+            .iter()
+            .copied()
+            .triplet_windows_iter(matrix::RollType::Simple)
+            .coords_iter()
+            .roll_mean_iter(step_size)
+            .collect();
+
+        assert!(means.len() > ROLL_SUM_REBUILD_INTERVAL);
+        for &i in &[
+            0usize,
+            1,
+            ROLL_SUM_REBUILD_INTERVAL - 1,
+            ROLL_SUM_REBUILD_INTERVAL + 1,
+            means.len() - 1,
+        ] {
+            // The trapezoidal mean: interior at full weight, the two ends at half.
+            let slice = &coords[i..i + window];
+            let x_sum: f64 = slice.iter().map(|c| c.x).sum::<f64>()
+                - 0.5 * slice[0].x
+                - 0.5 * slice[window - 1].x;
+            let expected = x_sum / (window as f64 - 1.0);
+            assert_relative_eq!(
+                means[i].x_bar,
+                expected,
+                epsilon = 1e-9,
+                max_relative = 1e-12
+            );
+        }
+    }
+
+    #[test]
+    fn test_size_hint_is_accurate_at_every_layer() {
+        // A size_hint that lies is worse than none, since callers preallocate from it.
+        // Check each layer against the count it actually produces, before and partway
+        // through iteration.
+        let seq = b"CCAACATTTTGACTTTTTGGGAGGGCACTAGCACCTATCTACCCTGAATC";
+        let (step_b, step_c) = (5usize, 15usize);
+
+        let triplets = seq
+            .iter()
+            .copied()
+            .triplet_windows_iter(matrix::RollType::Simple);
+        let (lo, hi) = triplets.size_hint();
+        let actual = triplets.count();
+        assert_eq!(actual, seq.len() - 2);
+        assert!(
+            lo <= actual && hi == Some(actual),
+            "triplets: {lo}..{hi:?} vs {actual}"
+        );
+
+        let coords = seq
+            .iter()
+            .copied()
+            .triplet_windows_iter(matrix::RollType::Simple)
+            .coords_iter();
+        let (lo, hi) = coords.size_hint();
+        let actual = coords.count();
+        assert!(
+            lo <= actual && hi.is_some_and(|h| h >= actual),
+            "coords: {lo}..{hi:?} vs {actual}"
+        );
+
+        let means = seq
+            .iter()
+            .copied()
+            .triplet_windows_iter(matrix::RollType::Simple)
+            .coords_iter()
+            .roll_mean_iter(step_b);
+        let (lo, hi) = means.size_hint();
+        let actual = means.count();
+        assert!(
+            lo <= actual && hi.is_some_and(|h| h >= actual),
+            "means: {lo}..{hi:?} vs {actual}"
+        );
+
+        let curves = CurveIter::new(
+            seq.iter().copied(),
+            matrix::RollType::Simple,
+            step_b,
+            step_c,
+            0.33335,
+        );
+        let (lo, hi) = curves.size_hint();
+        let collected: Vec<f64> = curves.collect();
+        assert_eq!(collected.len(), seq.len() - 2 * (step_b + step_c + 1));
+        assert!(
+            lo <= collected.len() && hi.is_some_and(|h| h >= collected.len()),
+            "curves: {lo}..{hi:?} vs {}",
+            collected.len()
+        );
+
+        // Partway through, the hint must still bound what is left.
+        let mut it = CurveIter::new(
+            seq.iter().copied(),
+            matrix::RollType::Simple,
+            step_b,
+            step_c,
+            0.33335,
+        );
+        it.next();
+        it.next();
+        let (lo, hi) = it.size_hint();
+        let left = it.count();
+        assert!(
+            lo <= left && hi.is_some_and(|h| h >= left),
+            "partway: {lo}..{hi:?} vs {left}"
+        );
+    }
+
+    #[test]
+    fn test_iterators_keep_returning_none_after_exhaustion() {
+        // FusedIterator is a promise, and the layers previously kept polling an inner
+        // iterator that had already finished, which Iterator does not define for a
+        // non-fused source.
+        let seq = b"CCAACATTTTGACTTTTTGGGAGGG";
+        let mut curves =
+            CurveIter::new(seq.iter().copied(), matrix::RollType::Simple, 2, 2, 0.33335);
+        while curves.next().is_some() {}
+        for _ in 0..5 {
+            assert!(curves.next().is_none(), "yielded again after finishing");
+        }
+
+        // Too short to produce anything at all: still None, repeatedly.
+        let mut empty = CurveIter::new(
+            b"ACG".iter().copied(),
+            matrix::RollType::Simple,
+            5,
+            15,
+            0.33335,
+        );
+        for _ in 0..5 {
+            assert!(empty.next().is_none());
+        }
+    }
+
+    #[test]
+    fn test_curve_iter_is_case_insensitive() {
+        // Soft-masked sequence must score identically to the same sequence unmasked.
+        // Before non-ACGT handling was added, the lowercase run panicked in the
+        // matrix lookup rather than producing a value at all.
+        let upper = b"CCAACATTTTGACTTTTTGGGAGGGCACTAGCACCTATCTACCCTGAATC";
+        let mixed = b"CCAACATTTTgacttttTGGGAGGGCACTagcacctatcTACCCTGAATC";
+        assert_eq!(upper.len(), mixed.len());
+
+        let curve = |seq: &[u8]| -> Vec<f64> {
+            CurveIter::new(
+                seq.iter().copied(),
+                matrix::RollType::Simple,
+                5,
+                15,
+                0.33335,
+            )
+            .collect()
+        };
+
+        let from_upper = curve(upper);
+        let from_mixed = curve(mixed);
+        assert_eq!(from_upper.len(), from_mixed.len());
+        assert!(!from_upper.is_empty());
+        for (u, m) in from_upper.iter().zip(&from_mixed) {
+            assert_relative_eq!(u, m, epsilon = 1e-12);
+        }
+    }
+
+    #[test]
+    fn test_sym_curve_step_larger_than_the_span_matches_the_reference() {
+        // A stride longer than the buffered span drains the buffer entirely, so the
+        // remainder of the stride has to be skipped in the source as well, or the dyads
+        // drift away from the reference's `win + i * step`.
+        let curv = synthetic_curvature(80, 0x9E3779B97F4A7C15);
+        for (win, step) in [(2usize, 9usize), (3, 7), (5, 30)] {
+            let expected = perl_symcurv(&curv, win, step);
+            let got: Vec<f64> = curv.iter().copied().sym_curve_iter(win, step).collect();
+            assert_eq!(got.len(), expected.len(), "count for win={win} step={step}");
+            for (i, (&value, &(dyad, want))) in got.iter().zip(&expected).enumerate() {
+                assert_eq!(dyad, win + i * step);
+                assert_relative_eq!(value, want, epsilon = 1e-12, max_relative = 1e-12);
+            }
+        }
     }
 }

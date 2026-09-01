@@ -1,8 +1,201 @@
-mod cli;
-use cli::Cli;
+//! The symcurve command line tool.
+
+use std::error::Error;
+
 use clap::Parser;
 
-// still basically a hello-world
+use symcurve::cli::Cli;
+use symcurve::curve::calls::{CallParams, NUCLEOSOME_HALF_WIDTH};
+use symcurve::curve::scan::{CurveParams, DEFAULT_CHUNK_SCORES, Stage, SymParams};
+use symcurve::output::{self, OutputFormat};
+use symcurve::stream::{self, ScanConfig};
+
+/// Upper bound on how much sequence to hold when reading through an index. Past this a
+/// larger window costs memory without saving meaningful work.
+const MAX_WINDOW_BASES: usize = 64 << 20;
+
 fn main() {
-    Cli::parse();
+    if let Err(err) = run() {
+        // Print Display rather than Debug: returning the error from main would render it
+        // with Debug, which shows struct internals instead of the message.
+        eprintln!("error: {err}");
+        std::process::exit(1);
+    }
+}
+
+fn run() -> Result<(), Box<dyn Error>> {
+    let args = Cli::parse();
+
+    // Resolve the output format before doing any work, so an unusable output path fails
+    // immediately rather than after scoring an entire genome.
+    let format = OutputFormat::from_path(&args.output)?;
+
+    let params = curve_params(&args);
+    let sym = SymParams {
+        win: usize::from(args.symcurve_win),
+        step: usize::from(args.symcurve_step),
+    };
+    let stage = Stage::from(args.stage);
+    warn_about_unused_arguments(&args);
+
+    let threads = rayon::current_num_threads();
+    let chunk_scores = args.max_memory.chunk_scores(threads, DEFAULT_CHUNK_SCORES);
+    if args.verbose {
+        eprintln!(
+            "budget {} over {threads} threads: {chunk_scores} scores per chunk",
+            args.max_memory
+        );
+    }
+
+    // An index lets each record be read a window at a time, which lowers the floor set
+    // by the largest record, and supplies chromosome sizes without a pass over the file.
+    let index = stream::load_index(&args.input)?;
+    let window_bases = args.max_memory.window_bases(MAX_WINDOW_BASES);
+    if args.verbose {
+        match &index {
+            Some(_) => eprintln!(
+                "using {}.fai: reading in windows of {window_bases} bases",
+                args.input.display()
+            ),
+            None => eprintln!(
+                "no {}.fai found: reading whole records, so the largest record sets the floor",
+                args.input.display()
+            ),
+        }
+    }
+
+    let config = ScanConfig {
+        params,
+        sym,
+        stage,
+        chunk_scores,
+        batch: threads,
+        window_bases,
+    };
+
+    let input = args.input.clone();
+    let verbose = args.verbose;
+    let index_for_run = index.clone();
+    let produce = move |emit: &mut dyn FnMut(&str, usize, f64) -> std::io::Result<()>| {
+        let stats = match &index_for_run {
+            Some(index) => stream::for_each_score_indexed(&input, index, &config, emit)?,
+            None => stream::for_each_score(&input, &config, emit)?,
+        };
+        if verbose {
+            eprintln!(
+                "{} records, {} scores; largest record {} bases",
+                stats.records, stats.scores, stats.longest_record
+            );
+        }
+        Ok(())
+    };
+
+    if args.stage.is_calls() {
+        // Calls are features, not per-base values, so they go to GFF rather than to a
+        // signal format.
+        if format != OutputFormat::Gff {
+            return Err(format!(
+                "--stage {:?} produces nucleosome calls, which are written as GFF; \
+                 give the output a .gff extension",
+                args.stage
+            )
+            .into());
+        }
+        let call_params = CallParams {
+            half_width: NUCLEOSOME_HALF_WIDTH,
+            spacer: usize::from(args.min_linker_size),
+        };
+        let greedy = args.stage == symcurve::cli::Stage::FinalCalls;
+        let feature = match args.roll {
+            symcurve::cli::Roll::Active => "stat_nucleosome",
+            symcurve::cli::Roll::Simple => "act_nucleosome",
+        };
+        let input = args.input.clone();
+        let verbose = args.verbose;
+        output::write_gff_streaming(&args.output, feature, move |emit| {
+            let stats = stream::for_each_record_calls(&input, &config, &call_params, greedy, emit)?;
+            if verbose {
+                eprintln!(
+                    "{} records, {} calls; largest record {} bases",
+                    stats.records, stats.scores, stats.longest_record
+                );
+            }
+            Ok(())
+        })?;
+    } else {
+        match format {
+            OutputFormat::Gff => {
+                return Err("GFF output is only produced by --stage calls or final-calls".into());
+            }
+            OutputFormat::BedGraph => output::write_bedgraph_streaming(&args.output, produce)?,
+            OutputFormat::BigWig => {
+                // The header needs every chromosome size before any value, so names and
+                // lengths are read in a first pass that keeps no sequence.
+                let sizes = match &index {
+                    Some(index) => stream::chrom_sizes_from_index(index),
+                    None => stream::chrom_sizes(&args.input)
+                        .map_err(|e| format!("cannot read {}: {e}", args.input.display()))?,
+                };
+                // Keep roughly a chunk's worth of values queued: enough to keep the writer
+                // fed, bounded so a slow writer cannot let the queue grow without limit.
+                let queue_depth = chunk_scores.min(1 << 16);
+                output::write_bigwig_streaming(&args.output, sizes, queue_depth, produce)?
+            }
+        }
+    }
+
+    if args.verbose {
+        eprintln!(
+            "wrote {} as {}",
+            args.output.display(),
+            match format {
+                OutputFormat::BigWig => "bigWig",
+                OutputFormat::BedGraph => "bedGraph",
+                OutputFormat::Gff => "GFF",
+            }
+        );
+    }
+    Ok(())
+}
+
+/// Translate the CLI arguments into the parameters the curve code takes.
+///
+/// The reference implementation has two rolling-mean parameters, `stepone` and `steptwo`,
+/// but its weighting only works out when `stepone == steptwo + 2`, and the Rust rolling
+/// mean derives both ends from a single `step_b`. So `curve_step_one` is the source of
+/// truth, giving `step_b = curve_step_one - 1`, and `curve_step_two` is checked for
+/// consistency rather than used.
+fn curve_params(args: &Cli) -> CurveParams {
+    CurveParams {
+        roll_type: args.roll.into(),
+        step_b: usize::from(args.curve_step_one) - 1,
+        step_c: usize::from(args.curve_step),
+        curve_scale: args.curve_scale,
+    }
+}
+
+/// Tell the user about arguments that will not affect the result.
+///
+/// Accepting a flag silently would let someone believe they had changed the output when
+/// they had not.
+fn warn_about_unused_arguments(args: &Cli) {
+    let implied_step_two = usize::from(args.curve_step_one).saturating_sub(2);
+    if usize::from(args.curve_step_two) != implied_step_two {
+        eprintln!(
+            "warning: --curve-step-two {} is inconsistent with --curve-step-one {} \
+             (which implies {}) and is being ignored",
+            args.curve_step_two, args.curve_step_one, implied_step_two
+        );
+    }
+    if args.matrices.is_some() {
+        eprintln!("warning: --matrices is not implemented yet and is being ignored");
+    }
+    if args.stage == symcurve::cli::Stage::Curvature
+        && (args.symcurve_win != 101 || args.symcurve_step != 1)
+    {
+        eprintln!("warning: --symcurve-win and --symcurve-step only apply to --stage symmetry");
+    }
+    if args.min_linker_size != 30 && !args.stage.is_calls() {
+        eprintln!("warning: --min-linker-size only applies to --stage calls or final-calls");
+    }
 }
