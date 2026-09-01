@@ -11,7 +11,7 @@
 //!
 //! Arguments:
 //!   <INPUT>   FASTA input file path
-//!   <OUTPUT>  bigWig output file path
+//!   <OUTPUT>  output file path; the extension picks the format: .bw/.bigWig, .bedGraph/.bg, or .gff
 //!
 //! Options:
 //!   -v, --verbose                            verbose setting
@@ -87,7 +87,7 @@ pub struct Cli {
     /// FASTA input file path
     pub input: PathBuf,
 
-    /// bigWig output file path
+    /// output file path; the extension picks the format: .bw/.bigWig, .bedGraph/.bg, or .gff
     pub output: PathBuf,
 
     /// verbose setting
