@@ -642,8 +642,13 @@ where
             DEGENERATE_SYMMETRY
         };
 
-        for _ in 0..self.step {
-            if self.buffer.pop_front().is_none() {
+        // Advance by `step`: drop what the buffer holds and skip the rest at the source,
+        // so a stride longer than the span still lands on the reference's next dyad.
+        let held = self.buffer.len().min(self.step);
+        self.buffer.drain(..held);
+        for _ in held..self.step {
+            if self.inner.next().is_none() {
+                self.inner_done = true;
                 break;
             }
         }
@@ -1715,6 +1720,23 @@ mod tests {
         assert!(!from_upper.is_empty());
         for (u, m) in from_upper.iter().zip(&from_mixed) {
             assert_relative_eq!(u, m, epsilon = 1e-12);
+        }
+    }
+
+    #[test]
+    fn test_sym_curve_step_larger_than_the_span_matches_the_reference() {
+        // A stride longer than the buffered span drains the buffer entirely, so the
+        // remainder of the stride has to be skipped in the source as well, or the dyads
+        // drift away from the reference's `win + i * step`.
+        let curv = synthetic_curvature(80, 0x9E3779B97F4A7C15);
+        for (win, step) in [(2usize, 9usize), (3, 7), (5, 30)] {
+            let expected = perl_symcurv(&curv, win, step);
+            let got: Vec<f64> = curv.iter().copied().sym_curve_iter(win, step).collect();
+            assert_eq!(got.len(), expected.len(), "count for win={win} step={step}");
+            for (i, (&value, &(dyad, want))) in got.iter().zip(&expected).enumerate() {
+                assert_eq!(dyad, win + i * step);
+                assert_relative_eq!(value, want, epsilon = 1e-12, max_relative = 1e-12);
+            }
         }
     }
 }
